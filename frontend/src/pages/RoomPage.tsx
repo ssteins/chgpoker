@@ -1,0 +1,472 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import type { Room, User, SSEEvent, VoteStats } from '../../../shared/types';
+import './RoomPage.css';
+
+/**
+ * RoomPage component - the main poker room interface
+ */
+const RoomPage: React.FC = () => {
+  const { roomId } = useParams<{ roomId: string }>();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const userId = searchParams.get('userId');
+  
+  const [room, setRoom] = useState<Room | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [voteStats, setVoteStats] = useState<VoteStats | null>(null);
+  const [selectedVote, setSelectedVote] = useState<string | number | null>(null);
+  // const [timerRemaining, setTimerRemaining] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [editingStory, setEditingStory] = useState(false);
+  const [storyForm, setStoryForm] = useState({ title: '', description: '', jiraId: '' });
+  const [copyIndicator, setCopyIndicator] = useState(false);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  
+  const eventSourceRef = useRef<EventSource | null>(null);
+
+  useEffect(() => {
+    if (!roomId || !userId) {
+      navigate('/');
+      return;
+    }
+
+    const initializeRoom = async () => {
+      try {
+        const response = await fetch(`/api/rooms/${roomId}`);
+        if (!response.ok) throw new Error('Room not found');
+        
+        const roomData: Room = await response.json();
+        setRoom(roomData);
+        
+        const user = roomData.users.find(u => u.id === userId);
+        if (!user) throw new Error('User not found in room');
+        setCurrentUser(user);
+        
+        setStoryForm({
+          title: roomData.story.title,
+          description: roomData.story.description,
+          jiraId: roomData.story.jiraId || ''
+        });
+        
+        const eventSource = new EventSource(`/api/rooms/${roomId}/events?userId=${userId}`);
+        eventSourceRef.current = eventSource;
+        
+        eventSource.onmessage = (event) => {
+          try {
+            const sseEvent: SSEEvent = JSON.parse(event.data);
+            handleSSEEvent(sseEvent);
+          } catch (err) {
+            console.error('Error parsing SSE event:', err);
+          }
+        };
+        
+        eventSource.onerror = () => {
+          setTimeout(() => {
+            if (eventSource.readyState === EventSource.CLOSED) {
+              window.location.reload();
+            }
+          }, 5000);
+        };
+        
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load room');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initializeRoom();
+    
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    };
+  }, [roomId, userId, navigate]);
+
+  const handleSSEEvent = (event: SSEEvent) => {
+    switch (event.type) {
+      case 'room-updated':
+        if (!event.data.message) setRoom(event.data);
+        break;
+      case 'user-joined':
+      case 'user-left':
+        setRoom(event.data.room);
+        break;
+      case 'vote-cast':
+        setRoom(prev => {
+          if (!prev) return prev;
+          const updatedUsers = prev.users.map(user => 
+            user.id === event.data.userId 
+              ? { ...user, hasVoted: event.data.hasVoted }
+              : user
+          );
+          return { ...prev, users: updatedUsers };
+        });
+        break;
+      case 'votes-revealed':
+        setRoom(event.data.room);
+        setVoteStats(event.data.stats);
+        break;
+      case 'timer-started':
+        // setTimerRemaining(event.data.duration);
+        break;
+      case 'timer-tick':
+        // setTimerRemaining(event.data.remaining);
+        break;
+      case 'timer-ended':
+        // setTimerRemaining(null);
+        setRoom(event.data.room);
+        setVoteStats(event.data.stats);
+        break;
+      case 'story-updated':
+        setRoom(prev => prev ? { ...prev, story: event.data } : prev);
+        setStoryForm({
+          title: event.data.title,
+          description: event.data.description,
+          jiraId: event.data.jiraId || ''
+        });
+        break;
+    }
+  };
+
+  const handleVote = async (vote: string | number) => {
+    if (!room || !currentUser || !room.isVotingActive) return;
+    
+    try {
+      const response = await fetch(`/api/rooms/${roomId}/vote?userId=${userId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vote })
+      });
+      
+      if (!response.ok) throw new Error('Failed to cast vote');
+      setSelectedVote(vote);
+    } catch (err) {
+      console.error('Error casting vote:', err);
+      setActionMessage('Failed to cast vote');
+      setTimeout(() => setActionMessage(null), 3000);
+    }
+  };
+
+  const getVotingOptions = (): (string | number)[] => {
+    if (!room) return [];
+    if (room.votingOption === 'custom') {
+      return [...room.customVotingValues, '?'];
+    }
+    
+    // Define voting options inline
+    const votingOptions = {
+      fibonacci: [0, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, '?'],
+      '1-5': [1, 2, 3, 4, 5, '?'],
+      '1-10': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, '?'],
+      evens: [2, 4, 6, 8, 10, 12, 14, 16, '?'],
+      odds: [1, 3, 5, 7, 9, 11, 13, 15, '?']
+    };
+    
+    return votingOptions[room.votingOption] || [];
+  };
+
+  const handleStartVoting = async () => {
+    try {
+      const response = await fetch(`/api/rooms/${roomId}/start-voting?userId=${userId}`, {
+        method: 'POST'
+      });
+      if (!response.ok) throw new Error('Failed to start voting');
+      setSelectedVote(null);
+      setVoteStats(null);
+    } catch (err) {
+      setActionMessage('Failed to start voting');
+      setTimeout(() => setActionMessage(null), 3000);
+    }
+  };
+
+  const handleRevealVotes = async () => {
+    try {
+      const response = await fetch(`/api/rooms/${roomId}/reveal?userId=${userId}`, {
+        method: 'POST'
+      });
+      if (!response.ok) throw new Error('Failed to reveal votes');
+    } catch (err) {
+      setActionMessage('Failed to reveal votes');
+      setTimeout(() => setActionMessage(null), 3000);
+    }
+  };
+
+  const handleUpdateStory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const response = await fetch(`/api/rooms/${roomId}/story?userId=${userId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(storyForm)
+      });
+      if (!response.ok) throw new Error('Failed to update story');
+      setEditingStory(false);
+    } catch (err) {
+      setActionMessage('Failed to update story');
+      setTimeout(() => setActionMessage(null), 3000);
+    }
+  };
+
+  const handleCopyLink = async () => {
+    try {
+      const link = `${window.location.origin}/room/${roomId}`;
+      await navigator.clipboard.writeText(link);
+      setCopyIndicator(true);
+      setTimeout(() => setCopyIndicator(false), 2000);
+    } catch (err) {
+      setActionMessage('Failed to copy link');
+      setTimeout(() => setActionMessage(null), 3000);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="room-page">
+        <div className="loading-container">
+          <div className="loading-spinner"></div>
+          <p>Loading poker room...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !room || !currentUser) {
+    return (
+      <div className="room-page">
+        <div className="error-container">
+          <h2>Unable to Load Room</h2>
+          <p>{error || 'Room not found'}</p>
+          <button onClick={() => navigate('/')} className="btn btn-primary">
+            Go Home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const votingOptions = getVotingOptions();
+  const usersWhoVoted = room.users.filter(u => u.hasVoted).length;
+  const totalUsers = room.users.length;
+  
+  return (
+    <div className="room-page">
+      {/* Action message indicator */}
+      {actionMessage && (
+        <div className="action-message error">
+          {actionMessage}
+        </div>
+      )}
+      
+      <header className="room-header">
+        <div className="room-header-content">
+          <div className="room-title-section">
+            <h1 className="room-title">{room.title}</h1>
+            <p className="room-description">{room.description}</p>
+          </div>
+          <div className="room-actions">
+            <button onClick={handleCopyLink} className="btn btn-secondary">
+              {copyIndicator ? '✅ Copied!' : '📋 Copy Link'}
+            </button>
+            <button onClick={() => navigate('/')} className="btn btn-danger">
+              🚪 Leave
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div className="room-content">
+        <aside className="room-sidebar">
+          <div className="story-card card">
+            <div className="card-header">
+              <h3 className="card-title">Current Story</h3>
+              {currentUser.isOwner && (
+                <button 
+                  onClick={() => setEditingStory(!editingStory)}
+                  className="btn-icon"
+                >
+                  ✏️
+                </button>
+              )}
+            </div>
+            
+            {editingStory ? (
+              <form onSubmit={handleUpdateStory} className="story-form">
+                <input
+                  type="text"
+                  value={storyForm.title}
+                  onChange={(e) => setStoryForm(prev => ({ ...prev, title: e.target.value }))}
+                  className="form-input mb-2"
+                  placeholder="Story title"
+                  required
+                />
+                <textarea
+                  value={storyForm.description}
+                  onChange={(e) => setStoryForm(prev => ({ ...prev, description: e.target.value }))}
+                  className="form-textarea mb-2"
+                  placeholder="Story description"
+                  rows={3}
+                />
+                <input
+                  type="text"
+                  value={storyForm.jiraId}
+                  onChange={(e) => setStoryForm(prev => ({ ...prev, jiraId: e.target.value }))}
+                  className="form-input mb-2"
+                  placeholder="JIRA ID (optional)"
+                />
+                <div className="form-buttons">
+                  <button type="button" onClick={() => setEditingStory(false)} className="btn btn-secondary">
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary">
+                    Save
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="story-display">
+                <h4 className="story-title">{room.story.title}</h4>
+                {room.story.description && (
+                  <p className="story-description">{room.story.description}</p>
+                )}
+                {room.story.jiraId && (
+                  <p className="story-jira">JIRA: {room.story.jiraId}</p>
+                )}
+              </div>
+            )}
+          </div>
+          
+          <div className="users-card card">
+            <div className="card-header">
+              <h3 className="card-title">Participants ({room.users.length})</h3>
+            </div>
+            <div className="users-list">
+              {room.users.map((user) => (
+                <div key={user.id} className="user-item">
+                  <span className="user-name">
+                    {user.name}
+                    {user.isOwner && ' 👑'}
+                  </span>
+                  <div className="user-status">
+                    {room.isVotingActive ? (
+                      user.hasVoted ? (
+                        <span className="vote-status voted">✅</span>
+                      ) : (
+                        <span className="vote-status pending">⏳</span>
+                      )
+                    ) : (
+                      room.votesRevealed && user.vote !== undefined && (
+                        <span className="vote-value">{user.vote}</span>
+                      )
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </aside>
+        
+        <main className="room-main">
+          <div className="voting-status card">
+            {room.isVotingActive ? (
+              <div className="voting-active">
+                <h2>🗳️ Voting in Progress</h2>
+                <p>Pick your estimate for the current story</p>
+                <div className="voting-progress">
+                  <span>{usersWhoVoted}/{totalUsers} votes cast</span>
+                  <div className="progress-bar">
+                    <div 
+                      className="progress-fill" 
+                      style={{ width: `${(usersWhoVoted / totalUsers) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : room.votesRevealed ? (
+              <div className="voting-complete">
+                <h2>📊 Votes Revealed</h2>
+                {voteStats && (
+                  <div className="vote-statistics">
+                    <div className="stat">
+                      <span className="stat-label">Total Votes:</span>
+                      <span className="stat-value">{voteStats.totalVotes}</span>
+                    </div>
+                    <div className="stat">
+                      <span className="stat-label">Average:</span>
+                      <span className="stat-value">{voteStats.average.toFixed(1)}</span>
+                    </div>
+                    <div className="stat">
+                      <span className="stat-label">Nearest Fibonacci:</span>
+                      <span className="stat-value">{voteStats.nearestFibonacci}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="voting-idle">
+                <h2>⏸️ Waiting to Start</h2>
+                <p>Room owner will start the next voting session</p>
+              </div>
+            )}
+          </div>
+          
+          {room.isVotingActive && (
+            <div className="voting-area card">
+              <h3>Choose Your Estimate</h3>
+              <div className="voting-options">
+                {votingOptions.map((option) => (
+                  <button
+                    key={option}
+                    onClick={() => handleVote(option)}
+                    className={`vote-btn ${
+                      selectedVote === option ? 'selected' : ''
+                    } ${
+                      currentUser.hasVoted ? 'voted' : ''
+                    }`}
+                    disabled={currentUser.hasVoted}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+              
+              {currentUser.hasVoted && (
+                <p className="vote-confirmation">
+                  ✅ You voted: <strong>{selectedVote}</strong>
+                </p>
+              )}
+            </div>
+          )}
+          
+          {currentUser.isOwner && (
+            <div className="owner-controls card">
+              <h3>Room Controls</h3>
+              <div className="control-buttons">
+                {!room.isVotingActive && !room.votesRevealed && (
+                  <button onClick={handleStartVoting} className="btn btn-success">
+                    🚀 Start Voting
+                  </button>
+                )}
+                {room.isVotingActive && (
+                  <button onClick={handleRevealVotes} className="btn btn-primary">
+                    👀 Reveal Votes
+                  </button>
+                )}
+                {room.votesRevealed && (
+                  <button onClick={handleStartVoting} className="btn btn-success">
+                    🔄 New Voting Round
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </main>
+      </div>
+    </div>
+  );
+};
+
+export default RoomPage;
