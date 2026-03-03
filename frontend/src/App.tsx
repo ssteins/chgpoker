@@ -1,8 +1,8 @@
 
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import HomePage from './pages/HomePage';
-import RoomPage from './pages/RoomPage';
-import JoinPage from './pages/JoinPage';
+import HomePage from './pages/HomePage.tsx';
+import RoomPage from './pages/RoomPage.tsx';
+import JoinPage from './pages/JoinPage.tsx';
 import './App.css';
 
 /**

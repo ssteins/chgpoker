@@ -26,6 +26,33 @@ const RoomPage: React.FC = () => {
   
   const eventSourceRef = useRef<EventSource | null>(null);
 
+  // Store user data in localStorage for persistence across refreshes
+  const storeUserData = (_roomData: Room, userData: User) => {
+    if (roomId && userId) {
+      localStorage.setItem(`poker_user_${roomId}`, JSON.stringify({
+        userId: userData.id,
+        userName: userData.name,
+        roomId: roomId,
+        timestamp: Date.now()
+      }));
+    }
+  };
+
+  // Get stored user data
+  const getStoredUserData = () => {
+    if (!roomId) return null;
+    const stored = localStorage.getItem(`poker_user_${roomId}`);
+    if (!stored) return null;
+    try {
+      const data = JSON.parse(stored);
+      // Check if data is less than 24 hours old
+      if (Date.now() - data.timestamp < 24 * 60 * 60 * 1000) {
+        return data;
+      }
+    } catch (e) {}
+    return null;
+  };
+
   useEffect(() => {
     if (!roomId || !userId) {
       navigate('/');
@@ -40,9 +67,41 @@ const RoomPage: React.FC = () => {
         const roomData: Room = await response.json();
         setRoom(roomData);
         
-        const user = roomData.users.find(u => u.id === userId);
-        if (!user) throw new Error('User not found in room');
+        let user = roomData.users.find(u => u.id === userId);
+        
+        // If user not found but we have stored data, try to rejoin
+        if (!user) {
+          const storedData = getStoredUserData();
+          if (storedData && storedData.userId === userId) {
+            try {
+              const rejoinResponse = await fetch(`/api/rooms/${roomId}/join`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userName: storedData.userName })
+              });
+              
+              if (rejoinResponse.ok) {
+                const rejoinData = await rejoinResponse.json();
+                setRoom(rejoinData.room);
+                user = rejoinData.user;
+                // Update URL with new user ID if it changed
+                if (user && user.id !== userId) {
+                  navigate(`/room/${roomId}/play?userId=${user.id}`, { replace: true });
+                  return; // Let the component re-initialize with new URL
+                }
+              }
+            } catch (rejoinError) {
+              console.error('Failed to rejoin room:', rejoinError);
+            }
+          }
+        }
+        
+        if (!user) {
+          throw new Error('User not found in room. Please rejoin the room.');
+        }
+        
         setCurrentUser(user);
+        storeUserData(roomData, user);
         
         setStoryForm({
           title: roomData.story.title,
@@ -87,9 +146,20 @@ const RoomPage: React.FC = () => {
   }, [roomId, userId, navigate]);
 
   const handleSSEEvent = (event: SSEEvent) => {
+    console.log('Received SSE event:', event.type, event.data);
+    
     switch (event.type) {
       case 'room-updated':
-        if (!event.data.message) setRoom(event.data);
+        if (!event.data.message) {
+          setRoom(event.data);
+          // Update current user data if it's included in the room update
+          if (currentUser && event.data.users) {
+            const updatedUser = event.data.users.find((u: User) => u.id === currentUser.id);
+            if (updatedUser) {
+              setCurrentUser(updatedUser);
+            }
+          }
+        }
         break;
       case 'user-joined':
       case 'user-left':
@@ -223,6 +293,30 @@ const RoomPage: React.FC = () => {
     }
   };
 
+  const handleLeaveRoom = async () => {
+    try {
+      // Close SSE connection
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+      
+      // Call leave endpoint to properly remove user from room
+      if (roomId && userId) {
+        await fetch(`/api/rooms/${roomId}/leave?userId=${userId}`, {
+          method: 'POST'
+        });
+        
+        // Clean up localStorage
+        localStorage.removeItem(`poker_user_${roomId}`);
+      }
+    } catch (error) {
+      console.error('Error leaving room:', error);
+    } finally {
+      // Always navigate away
+      navigate('/');
+    }
+  };
+
   if (loading) {
     return (
       <div className="room-page">
@@ -271,7 +365,7 @@ const RoomPage: React.FC = () => {
             <button onClick={handleCopyLink} className="btn btn-secondary">
               {copyIndicator ? '✅ Copied!' : '📋 Copy Link'}
             </button>
-            <button onClick={() => navigate('/')} className="btn btn-danger">
+            <button onClick={handleLeaveRoom} className="btn btn-danger">
               🚪 Leave
             </button>
           </div>
@@ -282,7 +376,7 @@ const RoomPage: React.FC = () => {
         <aside className="room-sidebar">
           <div className="story-card card">
             <div className="card-header">
-              <h3 className="card-title">Current Story</h3>
+              <h3 className="card-title">Current Vote</h3>
               {currentUser.isOwner && (
                 <button 
                   onClick={() => setEditingStory(!editingStory)}

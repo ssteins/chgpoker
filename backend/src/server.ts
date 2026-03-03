@@ -233,6 +233,27 @@ app.post('/api/rooms/:roomId/join', (req, res) => {
 });
 
 /**
+ * Leave a room (explicit user action)
+ */
+app.post('/api/rooms/:roomId/leave', (req, res) => {
+  try {
+    const { roomId } = req.params;
+    const { userId } = req.query;
+    
+    const room = rooms.get(roomId);
+    if (!room) {
+      return res.status(404).json({ error: 'Room not found' });
+    }
+    
+    removeUserFromRoom(roomId, userId as string);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error leaving room:', error);
+    res.status(500).json({ error: 'Failed to leave room' });
+  }
+});
+
+/**
  * Cast a vote
  */
 app.post('/api/rooms/:roomId/vote', (req, res) => {
@@ -423,12 +444,23 @@ app.get('/api/rooms/:roomId/events', (req, res) => {
     'Access-Control-Allow-Headers': 'Cache-Control'
   });
   
-  // Store connection
+  // Store connection (replace existing connection if user is reconnecting)
   let connections = roomConnections.get(roomId);
   if (!connections) {
     connections = new Map();
     roomConnections.set(roomId, connections);
   }
+  
+  // Close any existing connection for this user
+  const existingConnection = connections.get(userId);
+  if (existingConnection) {
+    try {
+      existingConnection.end();
+    } catch (e) {
+      // Connection already closed
+    }
+  }
+  
   connections.set(userId, res);
   
   // Send initial room state
@@ -441,12 +473,20 @@ app.get('/api/rooms/:roomId/events', (req, res) => {
   // Handle client disconnect
   req.on('close', () => {
     console.log(`SSE connection closed for user ${userId} in room ${roomId}`);
-    removeUserFromRoom(roomId, userId);
+    // Remove connection but keep user in room for reconnection
+    const connections = roomConnections.get(roomId);
+    if (connections) {
+      connections.delete(userId);
+    }
   });
   
   req.on('error', () => {
     console.log(`SSE connection error for user ${userId} in room ${roomId}`);
-    removeUserFromRoom(roomId, userId);
+    // Remove connection but keep user in room for reconnection
+    const connections = roomConnections.get(roomId);
+    if (connections) {
+      connections.delete(userId);
+    }
   });
   
   console.log(`SSE connection established for user ${userId} in room ${roomId}`);
