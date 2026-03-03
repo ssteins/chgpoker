@@ -157,12 +157,18 @@ const RoomPage: React.FC = () => {
     
     switch (event.type) {
       case 'room-updated':
-        setRoom(event.data);
-        // Update current user data if it's included in the room update
-        if (currentUser && event.data.users) {
-          const updatedUser = event.data.users.find((u: User) => u.id === currentUser.id);
-          if (updatedUser) {
-            setCurrentUser(updatedUser);
+        if (!event.data.message) {
+          setRoom(event.data);
+          // Clear selected vote when a new voting round starts
+          if (event.data.isVotingActive && !event.data.votesRevealed) {
+            setSelectedVote(null);
+          }
+          // Update current user data if it's included in the room update
+          if (currentUser && event.data.users) {
+            const updatedUser = event.data.users.find((u: User) => u.id === currentUser.id);
+            if (updatedUser) {
+              setCurrentUser(updatedUser);
+            }
           }
         }
         break;
