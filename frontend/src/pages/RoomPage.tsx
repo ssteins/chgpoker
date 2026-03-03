@@ -29,11 +29,12 @@ const RoomPage: React.FC = () => {
   const eventSourceRef = useRef<EventSource | null>(null);
 
   // Store user data in localStorage for persistence across refreshes
-  const storeUserData = (_roomData: Room, userData: User) => {
+  const storeUserData = (roomData: Room, userData: User) => {
     if (roomId && userId) {
       localStorage.setItem(`poker_user_${roomId}`, JSON.stringify({
         userId: userData.id,
         userName: userData.name,
+        isOwner: userData.isOwner,
         roomId: roomId,
         timestamp: Date.now()
       }));
@@ -47,8 +48,8 @@ const RoomPage: React.FC = () => {
     if (!stored) return null;
     try {
       const data = JSON.parse(stored);
-      // Check if data is less than 24 hours old
-      if (Date.now() - data.timestamp < 24 * 60 * 60 * 1000) {
+      // Check if data is less than 7 days old
+      if (Date.now() - data.timestamp < 7 * 24 * 60 * 60 * 1000) {
         return data;
       }
     } catch (e) {}
@@ -99,7 +100,42 @@ const RoomPage: React.FC = () => {
         }
         
         if (!user) {
-          throw new Error('User not found in room. Please rejoin the room.');
+          // If user not found, try one more time to rejoin the room gracefully
+          const storedData = getStoredUserData();
+          if (storedData && storedData.userId === userId) {
+            setActionMessage('Reconnecting to room...');
+            try {
+              const rejoinResponse = await fetch(`/api/rooms/${roomId}/join`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userName: storedData.userName })
+              });
+              
+              if (rejoinResponse.ok) {
+                const rejoinData = await rejoinResponse.json();
+                user = rejoinData.user;
+                setRoom(rejoinData.room);
+                
+                // Update URL with new user ID if it changed
+                if (user && user.id !== userId) {
+                  navigate(`/room/${roomId}/play?userId=${user.id}`, { replace: true });
+                  return;
+                }
+                setActionMessage(null);
+              }
+            } catch (rejoinError) {
+              console.error('Final rejoin attempt failed:', rejoinError);
+            }
+          }
+          
+          if (!user) {
+            // Last resort: redirect to join page instead of showing error
+            setActionMessage('Session expired. Redirecting to rejoin...');
+            setTimeout(() => {
+              navigate(`/room/${roomId}`, { replace: true });
+            }, 2000);
+            return;
+          }
         }
         
         setCurrentUser(user);
@@ -123,12 +159,18 @@ const RoomPage: React.FC = () => {
           }
         };
         
-        eventSource.onerror = () => {
-          setTimeout(() => {
-            if (eventSource.readyState === EventSource.CLOSED) {
-              window.location.reload();
-            }
-          }, 5000);
+        eventSource.onerror = (error) => {
+          console.log('SSE connection error:', error);
+          // Don't immediately reload - try to reconnect gracefully
+          if (eventSource.readyState === EventSource.CLOSED) {
+            setActionMessage('Connection lost. Attempting to reconnect...');
+            setTimeout(() => {
+              // Check if we're still on the same page before reloading
+              if (window.location.pathname.includes(`/room/${roomId}/play`)) {
+                window.location.reload();
+              }
+            }, 3000);
+          }
         };
         
       } catch (err) {

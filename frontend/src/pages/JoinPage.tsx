@@ -17,6 +17,23 @@ const JoinPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   /**
+   * Check for existing session in localStorage
+   */
+  const checkExistingSession = () => {
+    if (!roomId) return null;
+    const stored = localStorage.getItem(`poker_user_${roomId}`);
+    if (!stored) return null;
+    try {
+      const data = JSON.parse(stored);
+      // Check if data is less than 7 days old
+      if (Date.now() - data.timestamp < 7 * 24 * 60 * 60 * 1000) {
+        return data;
+      }
+    } catch (e) {}
+    return null;
+  };
+
+  /**
    * Load room details when component mounts
    */
   useEffect(() => {
@@ -25,6 +42,39 @@ const JoinPage: React.FC = () => {
         setError('Invalid room link');
         setLoading(false);
         return;
+      }
+
+      // Check for existing session first
+      const existingSession = checkExistingSession();
+      if (existingSession) {
+        console.log('Found existing session, attempting to rejoin:', existingSession);
+        try {
+          const response = await fetch(`/api/rooms/${roomId}`);
+          if (response.ok) {
+            const roomData: Room = await response.json();
+            const userStillInRoom = roomData.users.find(u => u.id === existingSession.userId);
+            if (userStillInRoom) {
+              // User still in room, redirect to play page
+              navigate(`/room/${roomId}/play?userId=${existingSession.userId}`, { replace: true });
+              return;
+            } else {
+              // User not in room anymore, try to rejoin
+              console.log('User not in room, attempting rejoin with stored name');
+              const rejoinResponse = await fetch(`/api/rooms/${roomId}/join`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userName: existingSession.userName })
+              });
+              if (rejoinResponse.ok) {
+                const rejoinData = await rejoinResponse.json();
+                navigate(`/room/${roomId}/play?userId=${rejoinData.user.id}`, { replace: true });
+                return;
+              }
+            }
+          }
+        } catch (err) {
+          console.log('Session restoration failed, will show join form:', err);
+        }
       }
 
       try {
@@ -47,7 +97,7 @@ const JoinPage: React.FC = () => {
     };
 
     loadRoom();
-  }, [roomId]);
+  }, [roomId, navigate]);
 
   /**
    * Join the poker room
