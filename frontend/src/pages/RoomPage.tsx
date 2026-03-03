@@ -415,10 +415,6 @@ const RoomPage: React.FC = () => {
       
       <header className="room-header">
         <div className="room-header-content">
-          <div className="room-title-section">
-            <h1 className="room-title">{room.title}</h1>
-            <p className="room-description">{room.description}</p>
-          </div>
           <div className="room-actions">
             <button onClick={handleCopyLink} className="btn btn-secondary">
               {copyIndicator ? '✅ Copied!' : '📋 Copy Link'}
@@ -568,6 +564,13 @@ const RoomPage: React.FC = () => {
         
         <main className="room-main">
           <div className="voting-status card">
+            <div className="room-info">
+              <h1 className="room-title">{room.title}</h1>
+              {room.description && (
+                <p className="room-description">{room.description}</p>
+              )}
+            </div>
+            
             {room.isVotingActive ? (
               <div className="voting-active">
                 <h2>🗳️ Voting in Progress</h2>

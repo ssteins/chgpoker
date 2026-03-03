@@ -79,25 +79,7 @@
   align-items: center;
 }
 
-/* Room info in voting status card */
-.room-info-section {
-  text-align: center;
-  margin-bottom: 16px;
-}
-
-.voting-status .room-title {
-  font-size: 32px;
-  font-weight: 700;
-  margin: 0 0 8px 0;
-  color: #1d1d1f;
-}
-
-.voting-status .room-description {
-  color: #86868b;
-  margin: 0;
-  font-size: 18px;
-  line-height: 1.5;
-}
+/* Room info in voting status card - moved to voting-status section */
 
 .room-actions {
   display: flex;
@@ -259,6 +241,27 @@
 .voting-status {
   text-align: center;
   padding: 32px 24px;
+}
+
+/* Room info inside voting status card */
+.voting-status .room-info {
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.voting-status .room-info .room-title {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+  color: #1d1d1f;
+}
+
+.voting-status .room-info .room-description {
+  color: #86868b;
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.5;
 }
 
 .voting-active h2,
