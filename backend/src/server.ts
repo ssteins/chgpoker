@@ -419,6 +419,45 @@ app.put('/api/rooms/:roomId/story', (req, res) => {
 });
 
 /**
+ * Update room settings (owner only)
+ */
+app.put('/api/rooms/:roomId/settings', (req, res) => {
+  try {
+    const { roomId } = req.params;
+    const { userId } = req.query;
+    const { title, description } = req.body;
+    
+    const room = rooms.get(roomId);
+    if (!room) {
+      return res.status(404).json({ error: 'Room not found' });
+    }
+    
+    const user = room.users.find(u => u.id === userId);
+    if (!user || !user.isOwner) {
+      return res.status(403).json({ error: 'Only room owner can update room settings' });
+    }
+    
+    // Update room settings
+    if (title !== undefined) room.title = title;
+    if (description !== undefined) room.description = description;
+    
+    rooms.set(roomId, room);
+    
+    sendSSEToRoom(roomId, {
+      type: 'settings-updated',
+      data: { title: room.title, description: room.description },
+      timestamp: new Date()
+    });
+    
+    console.log(`Room settings updated in room ${roomId}`);
+    res.json({ title: room.title, description: room.description });
+  } catch (error) {
+    console.error('Error updating room settings:', error);
+    res.status(500).json({ error: 'Failed to update room settings' });
+  }
+});
+
+/**
  * Server-Sent Events endpoint
  */
 app.get('/api/rooms/:roomId/events', (req, res) => {

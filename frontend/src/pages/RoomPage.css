@@ -75,21 +75,28 @@
   max-width: 1200px;
   margin: 0 auto;
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
-  gap: 20px;
 }
 
-.room-title {
-  font-size: 28px;
+/* Room info in voting status card */
+.room-info-section {
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.voting-status .room-title {
+  font-size: 32px;
   font-weight: 700;
-  margin: 0 0 4px 0;
+  margin: 0 0 8px 0;
   color: #1d1d1f;
 }
 
-.room-description {
+.voting-status .room-description {
   color: #86868b;
   margin: 0;
+  font-size: 18px;
+  line-height: 1.5;
 }
 
 .room-actions {
@@ -399,9 +406,7 @@
 /* Mobile responsive */
 @media (max-width: 768px) {
   .room-header-content {
-    flex-direction: column;
-    text-align: center;
-    gap: 16px;
+    justify-content: center;
   }
   
   .room-actions {
@@ -446,6 +451,116 @@
     min-width: 200px;
   }
 }
+
+/* Room Management - Combined Settings and Controls */
+.room-management-card {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.management-section {
+  margin-bottom: 16px;
+}
+
+.management-section:last-child {
+  margin-bottom: 0;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1d1d1f;
+  margin: 0;
+}
+
+.section-divider {
+  border: none;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  margin: 20px 0;
+}
+
+.room-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.room-form .form-input,
+.room-form .form-textarea {
+  background: white;
+  border: 1px solid #d2d2d7;
+  color: #1d1d1f;
+}
+
+.room-form .form-input:focus,
+.room-form .form-textarea:focus {
+  background: white;
+  border-color: #007aff;
+  box-shadow: 0 0 0 2px rgba(0, 125, 251, 0.1);
+}
+
+.room-display {
+  padding-top: 8px;
+}
+
+.room-title-display {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: #1d1d1f;
+}
+
+.room-description-display {
+  color: #86868b;
+  margin-bottom: 8px;
+  line-height: 1.5;
+  font-size: 14px;
+}
+
+.control-buttons-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.control-buttons-sidebar .btn {
+  width: 100%;
+  font-size: 14px;
+  padding: 10px 16px;
+}
+
+.control-buttons-sidebar .btn-success {
+  background: #34c759;
+  color: white;
+  border: 1px solid #34c759;
+}
+
+.control-buttons-sidebar .btn-success:hover {
+  background: #28a745;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(52, 199, 89, 0.3);
+}
+
+.control-buttons-sidebar .btn-primary {
+  background: #007aff;
+  color: white;
+  border: 1px solid #007aff;
+}
+
+.control-buttons-sidebar .btn-primary:hover {
+  background: #0056b3;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
+}
+
+/* Remove old separate styles */
 
 @media (max-width: 480px) {
   .room-title {
