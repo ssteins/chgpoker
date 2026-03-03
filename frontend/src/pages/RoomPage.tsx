@@ -558,7 +558,7 @@ const RoomPage: React.FC = () => {
                         Cancel
                       </button>
                       <button type="submit" className="btn btn-success">
-                        🚀 Start Voting
+                        Start Voting
                       </button>
                     </div>
                   </form>
@@ -571,14 +571,14 @@ const RoomPage: React.FC = () => {
                             onClick={handlePublishAndStartVoting} 
                             className="btn btn-success w-full"
                           >
-                            📝🚀 Publish & Start Voting
+                            Publish & Start Voting
                           </button>
                         ) : (
                           <button 
                             onClick={handlePrepareVote} 
                             className="btn btn-success w-full"
                           >
-                            🚀 Start Voting
+                            Start Voting
                           </button>
                         )}
                       </>
@@ -588,7 +588,7 @@ const RoomPage: React.FC = () => {
                         onClick={handleRevealVotes} 
                         className="btn btn-primary w-full"
                       >
-                        👀 Reveal Votes
+                        Reveal Votes
                       </button>
                     )}
                     {room.votesRevealed && (
@@ -596,7 +596,7 @@ const RoomPage: React.FC = () => {
                         onClick={handlePrepareVote} 
                         className="btn btn-success w-full"
                       >
-                        🔄 New Voting Round
+                        New Voting Round
                       </button>
                     )}
                   </div>
@@ -648,7 +648,7 @@ const RoomPage: React.FC = () => {
             
             {room.isVotingActive ? (
               <div className="voting-active">
-                <h2>🗳️ Voting in Progress</h2>
+                <h2>Voting in Progress</h2>
                 <p>Pick your estimate for the current story</p>
                 <div className="voting-progress">
                   <span>{usersWhoVoted}/{eligibleVoters} votes cast</span>
@@ -662,7 +662,7 @@ const RoomPage: React.FC = () => {
               </div>
             ) : room.votesRevealed ? (
               <div className="voting-complete">
-                <h2>📊 Votes Revealed</h2>
+                <h2>Votes Revealed</h2>
                 {voteStats && (
                   <div className="vote-statistics">
                     <div className="stat">
@@ -682,7 +682,7 @@ const RoomPage: React.FC = () => {
               </div>
             ) : (
               <div className="voting-idle">
-                <h2>⏸️ Waiting to Start</h2>
+                <h2>Waiting to Start</h2>
                 <p>Room owner will start the next voting session</p>
               </div>
             )}
@@ -710,7 +710,7 @@ const RoomPage: React.FC = () => {
               
               {currentUser.hasVoted && (
                 <p className="vote-confirmation">
-                  ✅ You voted: <strong>{selectedVote}</strong>
+                  You voted: <strong>{selectedVote}</strong>
                 </p>
               )}
             </div>
