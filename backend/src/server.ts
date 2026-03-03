@@ -10,7 +10,6 @@ import type {
   JoinRoomRequest,
   JoinRoomResponse,
   CastVoteRequest,
-  UpdateStoryRequest,
   StartTimerRequest,
   UpdateRoomSettingsRequest
 } from '../../shared/types';
@@ -127,7 +126,9 @@ app.post('/api/rooms', (req, res) => {
       id: roomId,
       title: title || 'Planning Poker Session',
       description: description || '',
+      jiraId: '',
       ownerId,
+      ownerParticipating: true,
       users: [{
         id: ownerId,
         name: ownerName,
@@ -135,12 +136,6 @@ app.post('/api/rooms', (req, res) => {
         hasVoted: false,
         joinedAt: new Date()
       }],
-      story: {
-        id: uuidv4(),
-        title: 'Story to estimate',
-        description: 'Enter your story details here',
-        jiraId: ''
-      },
       votingOption: votingOption || 'fibonacci',
       customVotingValues: customVotingValues || [],
       isVotingActive: false,
@@ -342,6 +337,7 @@ app.post('/api/rooms/:roomId/start-voting', (req, res) => {
   try {
     const { roomId } = req.params;
     const { userId } = req.query;
+    const { ownerParticipating } = req.body;
     
     const room = rooms.get(roomId);
     if (!room) {
@@ -351,6 +347,11 @@ app.post('/api/rooms/:roomId/start-voting', (req, res) => {
     const user = room.users.find(u => u.id === userId);
     if (!user || !user.isOwner) {
       return res.status(403).json({ error: 'Only room owner can start voting' });
+    }
+    
+    // Set owner participation flag
+    if (ownerParticipating !== undefined) {
+      room.ownerParticipating = ownerParticipating;
     }
     
     // Reset votes
@@ -370,51 +371,11 @@ app.post('/api/rooms/:roomId/start-voting', (req, res) => {
       timestamp: new Date()
     });
     
-    console.log(`Voting started in room ${roomId}`);
+    console.log(`Voting started in room ${roomId} (owner participating: ${room.ownerParticipating})`);
     res.json(room);
   } catch (error) {
     console.error('Error starting voting:', error);
     res.status(500).json({ error: 'Failed to start voting' });
-  }
-});
-
-/**
- * Update story details (owner only)
- */
-app.put('/api/rooms/:roomId/story', (req, res) => {
-  try {
-    const { roomId } = req.params;
-    const { userId } = req.query;
-    const { title, description, jiraId }: UpdateStoryRequest = req.body;
-    
-    const room = rooms.get(roomId);
-    if (!room) {
-      return res.status(404).json({ error: 'Room not found' });
-    }
-    
-    const user = room.users.find(u => u.id === userId);
-    if (!user || !user.isOwner) {
-      return res.status(403).json({ error: 'Only room owner can update story' });
-    }
-    
-    // Update story details
-    room.story.title = title || room.story.title;
-    room.story.description = description || room.story.description;
-    room.story.jiraId = jiraId || room.story.jiraId;
-    
-    rooms.set(roomId, room);
-    
-    sendSSEToRoom(roomId, {
-      type: 'story-updated',
-      data: room.story,
-      timestamp: new Date()
-    });
-    
-    console.log(`Story updated in room ${roomId}`);
-    res.json(room.story);
-  } catch (error) {
-    console.error('Error updating story:', error);
-    res.status(500).json({ error: 'Failed to update story' });
   }
 });
 
@@ -425,7 +386,7 @@ app.put('/api/rooms/:roomId/settings', (req, res) => {
   try {
     const { roomId } = req.params;
     const { userId } = req.query;
-    const { title, description } = req.body;
+    const { title, description, jiraId } = req.body;
     
     const room = rooms.get(roomId);
     if (!room) {
@@ -440,17 +401,18 @@ app.put('/api/rooms/:roomId/settings', (req, res) => {
     // Update room settings
     if (title !== undefined) room.title = title;
     if (description !== undefined) room.description = description;
+    if (jiraId !== undefined) room.jiraId = jiraId;
     
     rooms.set(roomId, room);
     
     sendSSEToRoom(roomId, {
-      type: 'settings-updated',
-      data: { title: room.title, description: room.description },
+      type: 'room-updated',
+      data: room,
       timestamp: new Date()
     });
     
     console.log(`Room settings updated in room ${roomId}`);
-    res.json({ title: room.title, description: room.description });
+    res.json(room);
   } catch (error) {
     console.error('Error updating room settings:', error);
     res.status(500).json({ error: 'Failed to update room settings' });

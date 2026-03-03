@@ -19,10 +19,10 @@ const RoomPage: React.FC = () => {
   // const [timerRemaining, setTimerRemaining] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [editingStory, setEditingStory] = useState(false);
   const [editingRoom, setEditingRoom] = useState(false);
-  const [storyForm, setStoryForm] = useState({ title: '', description: '', jiraId: '' });
-  const [roomForm, setRoomForm] = useState({ title: '', description: '' });
+  const [preparingVote, setPreparingVote] = useState(false);
+  const [ownerParticipating, setOwnerParticipating] = useState(true);
+  const [roomForm, setRoomForm] = useState({ title: '', description: '', jiraId: '' });
   const [copyIndicator, setCopyIndicator] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   
@@ -105,15 +105,10 @@ const RoomPage: React.FC = () => {
         setCurrentUser(user);
         storeUserData(roomData, user);
         
-        setStoryForm({
-          title: roomData.story.title,
-          description: roomData.story.description,
-          jiraId: roomData.story.jiraId || ''
-        });
-        
         setRoomForm({
           title: roomData.title,
-          description: roomData.description
+          description: roomData.description,
+          jiraId: roomData.jiraId || ''
         });
         
         const eventSource = new EventSource(`/api/rooms/${roomId}/events?userId=${userId}`);
@@ -206,21 +201,6 @@ const RoomPage: React.FC = () => {
         setRoom(event.data.room);
         setVoteStats(event.data.stats);
         break;
-      case 'story-updated':
-        setRoom(prev => prev ? { ...prev, story: event.data } : prev);
-        setStoryForm({
-          title: event.data.title,
-          description: event.data.description,
-          jiraId: event.data.jiraId || ''
-        });
-        break;
-      case 'settings-updated':
-        setRoom(prev => prev ? { ...prev, title: event.data.title, description: event.data.description } : prev);
-        setRoomForm({
-          title: event.data.title,
-          description: event.data.description
-        });
-        break;
     }
   };
 
@@ -261,6 +241,15 @@ const RoomPage: React.FC = () => {
     return votingOptions[room.votingOption] || [];
   };
 
+  const handlePrepareVote = () => {
+    setRoomForm({
+      title: room?.title || '',
+      description: room?.description || '',
+      jiraId: room?.jiraId || ''
+    });
+    setPreparingVote(true);
+  };
+
   const handleStartVoting = async () => {
     try {
       const response = await fetch(`/api/rooms/${roomId}/start-voting?userId=${userId}`, {
@@ -269,8 +258,37 @@ const RoomPage: React.FC = () => {
       if (!response.ok) throw new Error('Failed to start voting');
       setSelectedVote(null);
       setVoteStats(null);
+      setPreparingVote(false);
     } catch (err) {
       setActionMessage('Failed to start voting');
+      setTimeout(() => setActionMessage(null), 3000);
+    }
+  };
+
+  const handleStartVotingWithStory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      // Update room details first
+      const roomResponse = await fetch(`/api/rooms/${roomId}/settings?userId=${userId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(roomForm)
+      });
+      if (!roomResponse.ok) throw new Error('Failed to update room');
+
+      // Then start voting with owner participation flag
+      const voteResponse = await fetch(`/api/rooms/${roomId}/start-voting?userId=${userId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ownerParticipating })
+      });
+      if (!voteResponse.ok) throw new Error('Failed to start voting');
+      
+      setSelectedVote(null);
+      setVoteStats(null);
+      setPreparingVote(false);
+    } catch (err) {
+      setActionMessage('Failed to start voting session');
       setTimeout(() => setActionMessage(null), 3000);
     }
   };
@@ -283,22 +301,6 @@ const RoomPage: React.FC = () => {
       if (!response.ok) throw new Error('Failed to reveal votes');
     } catch (err) {
       setActionMessage('Failed to reveal votes');
-      setTimeout(() => setActionMessage(null), 3000);
-    }
-  };
-
-  const handleUpdateStory = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const response = await fetch(`/api/rooms/${roomId}/story?userId=${userId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(storyForm)
-      });
-      if (!response.ok) throw new Error('Failed to update story');
-      setEditingStory(false);
-    } catch (err) {
-      setActionMessage('Failed to update story');
       setTimeout(() => setActionMessage(null), 3000);
     }
   };
@@ -408,6 +410,7 @@ const RoomPage: React.FC = () => {
 
   const votingOptions = getVotingOptions();
   const usersWhoVoted = room.users.filter(u => u.hasVoted).length;
+  const eligibleVoters = room.ownerParticipating ? room.users.length : room.users.filter(u => !u.isOwner).length;
   const totalUsers = room.users.length;
   
   return (
@@ -460,15 +463,22 @@ const RoomPage: React.FC = () => {
                       value={roomForm.title}
                       onChange={(e) => setRoomForm(prev => ({ ...prev, title: e.target.value }))}
                       className="form-input mb-2"
-                      placeholder="Room title"
+                      placeholder="Title"
                       required
                     />
                     <textarea
                       value={roomForm.description}
                       onChange={(e) => setRoomForm(prev => ({ ...prev, description: e.target.value }))}
                       className="form-textarea mb-2"
-                      placeholder="Room description"
+                      placeholder="Description"
                       rows={2}
+                    />
+                    <input
+                      type="text"
+                      value={roomForm.jiraId}
+                      onChange={(e) => setRoomForm(prev => ({ ...prev, jiraId: e.target.value }))}
+                      className="form-input mb-2"
+                      placeholder="Jira ID (optional)"
                     />
                     <div className="form-buttons">
                       <button type="button" onClick={() => setEditingRoom(false)} className="btn btn-secondary">
@@ -485,6 +495,9 @@ const RoomPage: React.FC = () => {
                     {room.description && (
                       <p className="room-description-display">{room.description}</p>
                     )}
+                    {room.jiraId && (
+                      <p className="room-jira-display">{room.jiraId}</p>
+                    )}
                   </div>
                 )}
               </div>
@@ -497,43 +510,97 @@ const RoomPage: React.FC = () => {
                   <h4 className="section-title">Session Controls</h4>
                 </div>
                 
-                <div className="control-buttons-sidebar">
-                  {!room.isVotingActive && !room.votesRevealed && (
-                    <>
-                      {(editingRoom || editingStory) ? (
-                        <button 
-                          onClick={handlePublishAndStartVoting} 
-                          className="btn btn-success w-full"
-                        >
-                          📝🚀 Publish & Start Voting
-                        </button>
-                      ) : (
-                        <button 
-                          onClick={handleStartVoting} 
-                          className="btn btn-success w-full"
-                        >
-                          🚀 Start Voting
-                        </button>
-                      )}
-                    </>
-                  )}
-                  {room.isVotingActive && (
-                    <button 
-                      onClick={handleRevealVotes} 
-                      className="btn btn-primary w-full"
-                    >
-                      👀 Reveal Votes
-                    </button>
-                  )}
-                  {room.votesRevealed && (
-                    <button 
-                      onClick={handleStartVoting} 
-                      className="btn btn-success w-full"
-                    >
-                      🔄 New Voting Round
-                    </button>
-                  )}
-                </div>
+                {preparingVote ? (
+                  <form onSubmit={handleStartVotingWithStory} className="vote-prep-form">
+                    <div className="story-inputs">
+                      <input
+                        type="text"
+                        value={roomForm.title}
+                        onChange={(e) => setRoomForm(prev => ({ ...prev, title: e.target.value }))}
+                        className="form-input mb-2"
+                        placeholder="Title"
+                        required
+                      />
+                      <textarea
+                        value={roomForm.description}
+                        onChange={(e) => setRoomForm(prev => ({ ...prev, description: e.target.value }))}
+                        className="form-textarea mb-2"
+                        placeholder="Description"
+                        rows={3}
+                      />
+                      <input
+                        type="text"
+                        value={roomForm.jiraId}
+                        onChange={(e) => setRoomForm(prev => ({ ...prev, jiraId: e.target.value }))}
+                        className="form-input mb-2"
+                        placeholder="Jira ID (optional)"
+                      />
+                    </div>
+                    
+                    <div className="owner-participation mb-3">
+                      <label className="checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={ownerParticipating}
+                          onChange={(e) => setOwnerParticipating(e.target.checked)}
+                          className="checkbox-input"
+                        />
+                        <span className="checkbox-text">I will vote this round</span>
+                      </label>
+                    </div>
+                    
+                    <div className="form-buttons">
+                      <button 
+                        type="button" 
+                        onClick={() => setPreparingVote(false)} 
+                        className="btn btn-secondary"
+                      >
+                        Cancel
+                      </button>
+                      <button type="submit" className="btn btn-success">
+                        🚀 Start Voting
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="control-buttons-sidebar">
+                    {!room.isVotingActive && !room.votesRevealed && (
+                      <>
+                        {editingRoom ? (
+                          <button 
+                            onClick={handlePublishAndStartVoting} 
+                            className="btn btn-success w-full"
+                          >
+                            📝🚀 Publish & Start Voting
+                          </button>
+                        ) : (
+                          <button 
+                            onClick={handlePrepareVote} 
+                            className="btn btn-success w-full"
+                          >
+                            🚀 Start Voting
+                          </button>
+                        )}
+                      </>
+                    )}
+                    {room.isVotingActive && (
+                      <button 
+                        onClick={handleRevealVotes} 
+                        className="btn btn-primary w-full"
+                      >
+                        👀 Reveal Votes
+                      </button>
+                    )}
+                    {room.votesRevealed && (
+                      <button 
+                        onClick={handlePrepareVote} 
+                        className="btn btn-success w-full"
+                      >
+                        🔄 New Voting Round
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -551,7 +618,9 @@ const RoomPage: React.FC = () => {
                   </span>
                   <div className="user-status">
                     {room.isVotingActive ? (
-                      user.hasVoted ? (
+                      user.isOwner && !room.ownerParticipating ? (
+                        <span className="vote-status observer">👀</span>
+                      ) : user.hasVoted ? (
                         <span className="vote-status voted">✅</span>
                       ) : (
                         <span className="vote-status pending">⏳</span>
@@ -582,11 +651,11 @@ const RoomPage: React.FC = () => {
                 <h2>🗳️ Voting in Progress</h2>
                 <p>Pick your estimate for the current story</p>
                 <div className="voting-progress">
-                  <span>{usersWhoVoted}/{totalUsers} votes cast</span>
+                  <span>{usersWhoVoted}/{eligibleVoters} votes cast</span>
                   <div className="progress-bar">
                     <div 
                       className="progress-fill" 
-                      style={{ width: `${(usersWhoVoted / totalUsers) * 100}%` }}
+                      style={{ width: `${(usersWhoVoted / eligibleVoters) * 100}%` }}
                     />
                   </div>
                 </div>
@@ -619,7 +688,7 @@ const RoomPage: React.FC = () => {
             )}
           </div>
           
-          {room.isVotingActive && (
+          {room.isVotingActive && !(currentUser.isOwner && !room.ownerParticipating) && (
             <div className="voting-area card">
               <h3>Choose Your Estimate</h3>
               <div className="voting-options">

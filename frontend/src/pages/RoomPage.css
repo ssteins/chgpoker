@@ -222,6 +222,14 @@
   color: #ff9500;
 }
 
+.vote-status.observer {
+  color: #86868b;
+}
+
+.vote-status.observer {
+  color: #86868b;
+}
+
 .vote-value {
   background: #007aff;
   color: white;
@@ -525,6 +533,91 @@
   margin-bottom: 8px;
   line-height: 1.5;
   font-size: 14px;
+}
+
+.room-jira-display {
+  font-size: 14px;
+  color: #007aff;
+  margin: 0;
+  font-weight: 500;
+}
+
+/* Vote preparation form */
+.vote-prep-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.story-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vote-prep-form .form-input,
+.vote-prep-form .form-textarea {
+  background: white;
+  border: 1px solid #d2d2d7;
+  border-radius: 6px;
+  padding: 10px;
+  font-size: 14px;
+  width: 100%;
+  box-sizing: border-box;
+  color: #1d1d1f;
+}
+
+.vote-prep-form .form-input:focus,
+.vote-prep-form .form-textarea:focus {
+  border-color: #007aff;
+  box-shadow: 0 0 0 2px rgba(0, 125, 251, 0.1);
+  outline: none;
+}
+
+.vote-prep-form .form-textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+.owner-participation {
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #1d1d1f;
+  margin: 0;
+  user-select: none;
+}
+
+.checkbox-input {
+  width: 16px;
+  height: 16px;
+  accent-color: #007aff;
+  cursor: pointer;
+}
+
+.checkbox-text {
+  font-weight: 500;
+}
+
+.vote-prep-form .form-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.vote-prep-form .form-buttons .btn {
+  flex: 1;
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .control-buttons-sidebar {

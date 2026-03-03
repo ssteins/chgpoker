@@ -18,25 +18,16 @@ export interface User {
 }
 
 /**
- * Current story being voted on
- */
-export interface Story {
-  id: string;
-  title: string;
-  description: string;
-  jiraId?: string;
-}
-
-/**
  * Poker room configuration and state
  */
 export interface Room {
   id: string;
   title: string;
   description: string;
+  jiraId?: string;
   ownerId: string;
+  ownerParticipating?: boolean;
   users: User[];
-  story: Story;
   votingOption: VotingOption;
   customVotingValues: string[];
   isVotingActive: boolean;
@@ -68,7 +59,6 @@ export type SSEEventType =
   | 'timer-started' 
   | 'timer-tick' 
   | 'timer-ended'
-  | 'story-updated'
   | 'settings-updated';
 
 /**
@@ -109,21 +99,16 @@ export interface CastVoteRequest {
   vote: string | number;
 }
 
-export interface UpdateStoryRequest {
-  title: string;
-  description: string;
+export interface UpdateRoomSettingsRequest {
+  title?: string;
+  description?: string;
   jiraId?: string;
+  votingOption?: VotingOption;
+  customVotingValues?: string[];
 }
 
 export interface StartTimerRequest {
   duration: number; // in seconds
-}
-
-export interface UpdateRoomSettingsRequest {
-  title?: string;
-  description?: string;
-  votingOption?: VotingOption;
-  customVotingValues?: string[];
 }
 
 /**
