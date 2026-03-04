@@ -754,6 +754,15 @@ const RoomPage: React.FC = () => {
             <div className="users-list">
               {room.users.map((user) => (
                 <div key={user.id} className="user-item">
+                                        {currentUser.isOwner && !user.isOwner && (
+                      <button
+                        onClick={() => handleRemoveUser(user.id, user.name)}
+                        className="btn-remove-user"
+                        title={`Remove ${user.name}`}
+                      >
+                        ×
+                      </button>
+                    )}
                   <span className="user-name">
                     {user.name}
                     {user.isOwner && ' (Owner)'}
@@ -774,15 +783,7 @@ const RoomPage: React.FC = () => {
                         )
                       )}
                     </div>
-                    {currentUser.isOwner && !user.isOwner && (
-                      <button
-                        onClick={() => handleRemoveUser(user.id, user.name)}
-                        className="btn-remove-user"
-                        title={`Remove ${user.name}`}
-                      >
-                        ×
-                      </button>
-                    )}
+
                   </div>
                 </div>
               ))}
