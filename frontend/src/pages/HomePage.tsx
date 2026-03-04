@@ -132,7 +132,7 @@ const HomePage: React.FC = () => {
         )}
         
         <div className="home-header">
-          <h1 className="home-title">🃏 Pointing Poker</h1>
+          <h1 className="home-title">Pointing Poker</h1>
           <p className="home-subtitle">
             Create a planning poker session to estimate your user stories with your team
           </p>
@@ -238,7 +238,7 @@ const HomePage: React.FC = () => {
               className="btn btn-primary w-full"
               disabled={loading || !formData.ownerName.trim()}
             >
-              {loading ? 'Creating Room...' : '🚀 Create Room'}
+              {loading ? 'Creating Room...' : 'Create Room'}
             </button>
           </form>
         </div>
@@ -248,12 +248,12 @@ const HomePage: React.FC = () => {
           <h3 className="features-title">Features</h3>
           <div className="features-grid">
             <div className="feature-card">
-              <div className="feature-icon">⚡</div>
+              <div className="feature-icon">★</div>
               <h4>Real-time Voting</h4>
               <p>See when team members vote without revealing the actual estimates</p>
             </div>
             <div className="feature-card">
-              <div className="feature-icon">📊</div>
+              <div className="feature-icon">◆</div>
               <h4>Vote Statistics</h4>
               <p>Automatic calculation of averages and nearest Fibonacci numbers</p>
             </div>
@@ -263,7 +263,7 @@ const HomePage: React.FC = () => {
               <p>Set time limits for voting sessions to keep discussions focused</p>
             </div>
             <div className="feature-card">
-              <div className="feature-icon">🔔</div>
+              <div className="feature-icon">◇</div>
               <h4>Nudge Feature</h4>
               <p>Gently remind team members who haven't voted yet</p>
             </div>

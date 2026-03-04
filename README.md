@@ -1,8 +1,8 @@
-# 🃏 Pointing Poker Application
+# Pointing Poker Application
 
 A real-time planning poker application built with React, Node.js, and TypeScript for agile development teams to estimate user stories using Fibonacci numbers and other voting scales.
 
-## ✨ Features
+## Features
 
 - **Real-time Voting**: See when team members vote without revealing estimates
 - **Multiple Voting Scales**: Fibonacci, Simple (1-5), Linear (1-10), Even/Odd numbers, and custom values
@@ -14,7 +14,7 @@ A real-time planning poker application built with React, Node.js, and TypeScript
 - **Timer Support**: Set time limits for voting sessions (ready for implementation)
 - **Owner Controls**: Room creators can start voting, reveal votes, and manage sessions
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -44,7 +44,7 @@ A real-time planning poker application built with React, Node.js, and TypeScript
 
 This will start both the backend server (port 3001) and frontend development server (port 5173).
 
-## 🛠️ Development Scripts
+## Development Scripts
 
 ```bash
 # Start both backend and frontend
@@ -63,7 +63,7 @@ npm run build:frontend
 npm run build:backend
 ```
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 hackathon2026.02/
@@ -88,7 +88,7 @@ hackathon2026.02/
 └── package.json          # Root package.json for scripts
 ```
 
-## 🎮 How to Use
+## How to Use
 
 1. **Create a Room**: 
    - Enter your name as room owner
@@ -167,7 +167,7 @@ For production deployment:
 2. Update environment variables with production URLs
 3. Optionally enable JWT signature verification in backend
 
-## �🔧 Technical Details
+## Technical Details
 
 ### Backend (Port 3001)
 - **Framework**: Express.js with TypeScript
@@ -195,7 +195,7 @@ For production deployment:
 - **VoteStats**: Voting statistics and analysis
 - **SSE Events**: Real-time event definitions
 
-## 🎨 Design System
+## Design System
 
 The application uses an Apple-inspired design system with:
 - Clean typography and spacing
@@ -205,7 +205,7 @@ The application uses an Apple-inspired design system with:
 - Consistent color palette
 - Mobile-friendly responsive design
 
-## 🔮 Future Enhancements
+## Future Enhancements
 
 - [ ] Timer functionality for voting sessions
 - [ ] Vote history and session analytics
@@ -225,7 +225,7 @@ The application uses an Apple-inspired design system with:
 4. Test thoroughly
 5. Submit a pull request
 
-## 📄 License
+## License
 
 This project is open source and available under the [MIT License](LICENSE).
 
@@ -248,6 +248,6 @@ This project is open source and available under the [MIT License](LICENSE).
 - Backend logs will show in the terminal
 - Use React DevTools for component debugging
 
-## 👏 Acknowledgments
+## Acknowledgments
 
 Built with modern web technologies for a smooth, real-time planning poker experience. Perfect for distributed agile teams who need reliable story estimation tools.

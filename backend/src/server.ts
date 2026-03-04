@@ -929,6 +929,6 @@ app.get('/api/health', (req: express.Request, res: express.Response) => {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`🃏 Pointing Poker server running on port ${PORT}`);
-  console.log(`📊 Health check available at http://localhost:${PORT}/api/health`);
+  console.log(`Pointing Poker server running on port ${PORT}`);
+  console.log(`Health check available at http://localhost:${PORT}/api/health`);
 });

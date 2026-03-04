@@ -187,11 +187,11 @@ const JoinPage: React.FC = () => {
       <div className="join-page">
         <div className="join-container">
           <div className="error-card card text-center">
-            <div className="error-icon">❌</div>
+            <div className="error-icon">×</div>
             <h2 className="error-title">Unable to Join Room</h2>
             <p className="error-message">{error}</p>
             <button onClick={handleGoHome} className="btn btn-primary mt-3">
-              🏠 Go to Home Page
+              Go to Home Page
             </button>
           </div>
         </div>
@@ -209,7 +209,7 @@ const JoinPage: React.FC = () => {
         {/* Room information */}
         <div className="room-info-card card">
           <div className="card-header">
-            <h1 className="card-title">🃏 Join Poker Room</h1>
+            <h1 className="card-title">Join Poker Room</h1>
             <p className="card-subtitle">You're about to join an active planning session</p>
           </div>
           
@@ -273,7 +273,7 @@ const JoinPage: React.FC = () => {
 
             {error && (
               <div className="error-message">
-                ❌ {error}
+                × {error}
               </div>
             )}
 
@@ -284,14 +284,14 @@ const JoinPage: React.FC = () => {
                 className="btn btn-secondary"
                 disabled={joining}
               >
-                🏠 Go Home
+                Go Home
               </button>
               <button 
                 type="submit" 
                 className="btn btn-primary"
                 disabled={joining || !userName.trim()}
               >
-                {joining ? 'Joining...' : '🚀 Join Room'}
+                {joining ? 'Joining...' : 'Join Room'}
               </button>
             </div>
           </form>
@@ -306,7 +306,7 @@ const JoinPage: React.FC = () => {
                 <div key={user.id} className="participant">
                   <span className="participant-name">
                     {user.name}
-                    {user.isOwner && ' 👑'}
+                    {user.isOwner && ' (Owner)'}
                   </span>
                 </div>
               ))}

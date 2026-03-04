@@ -568,10 +568,10 @@ const RoomPage: React.FC = () => {
         <div className="room-header-content">
           <div className="room-actions">
             <button onClick={handleCopyLink} className="btn btn-secondary">
-              {copyIndicator ? '✅ Copied!' : '📋 Copy Link'}
+              {copyIndicator ? 'Copied!' : 'Copy Link'}
             </button>
             <button onClick={handleLeaveRoom} className="btn btn-danger">
-              🚪 Leave
+              Leave
             </button>
           </div>
         </div>
@@ -594,7 +594,7 @@ const RoomPage: React.FC = () => {
                     onClick={() => setEditingRoom(!editingRoom)}
                     className="btn-icon"
                   >
-                    ✏️
+                    Edit
                   </button>
                 </div>
                 
@@ -756,15 +756,15 @@ const RoomPage: React.FC = () => {
                 <div key={user.id} className="user-item">
                   <span className="user-name">
                     {user.name}
-                    {user.isOwner && ' 👑'}
+                    {user.isOwner && ' (Owner)'}
                   </span>
                   <div className="user-actions">
                     <div className="user-status">
                       {room.isVotingActive ? (
                         user.isOwner && !room.ownerParticipating ? (
-                          <span className="vote-status observer">👀</span>
+                          <span className="vote-status observer">Observer</span>
                         ) : user.hasVoted ? (
-                          <span className="vote-status voted">✅</span>
+                          <span className="vote-status voted">✓</span>
                         ) : (
                           <span className="vote-status pending">⏳</span>
                         )
@@ -780,7 +780,7 @@ const RoomPage: React.FC = () => {
                         className="btn-remove-user"
                         title={`Remove ${user.name}`}
                       >
-                        ❌
+                        ×
                       </button>
                     )}
                   </div>
