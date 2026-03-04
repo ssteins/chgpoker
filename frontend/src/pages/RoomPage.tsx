@@ -164,10 +164,25 @@ const RoomPage: React.FC = () => {
         
         eventSource.onmessage = (event) => {
           try {
-            const sseEvent: SSEEvent = JSON.parse(event.data);
+            // Validate event data before parsing
+            if (!event.data || typeof event.data !== 'string') {
+              console.warn('Received invalid SSE event data:', event.data);
+              return;
+            }
+            
+            // Trim whitespace that might cause parsing issues
+            const eventData = event.data.trim();
+            if (!eventData || (!eventData.startsWith('{') && !eventData.startsWith('['))) {
+              console.warn('Received non-JSON SSE data:', eventData);
+              return;
+            }
+            
+            const sseEvent: SSEEvent = JSON.parse(eventData);
             handleSSEEvent(sseEvent);
           } catch (err) {
             console.error('Error parsing SSE event:', err);
+            console.error('Raw event data:', event.data);
+            // Don't disconnect on parsing errors - just log and continue
           }
         };
         
@@ -181,8 +196,9 @@ const RoomPage: React.FC = () => {
               if (window.location.pathname.includes(`/room/${roomId}/play`)) {
                 window.location.reload();
               }
-            }, 3000);
-          }
+            }, 3000);          } else if (eventSource.readyState === EventSource.CONNECTING) {
+            setActionMessage('Reconnecting...');
+            setTimeout(() => setActionMessage(null), 5000);          }
         };
         
       } catch (err) {

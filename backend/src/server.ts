@@ -236,9 +236,13 @@ function sendSSEToRoom(roomId: string, event: SSEEvent): void {
   
   connections.forEach((res, userId) => {
     try {
-      res.write(eventData);
+      if (res.writable) {
+        res.write(eventData);
+      } else {
+        connections.delete(userId);
+      }
     } catch (error) {
-      console.log(`Failed to send SSE to user ${userId}`);
+      console.log(`Failed to send SSE to user ${userId}:`, error instanceof Error ? error.message : String(error));
       connections.delete(userId);
     }
   });
@@ -886,7 +890,7 @@ app.get('/api/rooms/:roomId/events',
     type: 'room-updated',
     data: room,
     timestamp: new Date()
-  })}\\n\\n`);
+  })}\n\n`);
   
   // Handle client disconnect
   req.on('close', () => {
