@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext';
 import type { Room, JoinRoomRequest, JoinRoomResponse } from '../../../shared/types';
 import './JoinPage.css';
 
@@ -10,11 +11,19 @@ import './JoinPage.css';
 const JoinPage: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
+  const { isAuthenticated, user, getAccessToken } = useAuth();
   const [room, setRoom] = useState<Room | null>(null);
   const [userName, setUserName] = useState('');
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Pre-fill username from Okta if available
+  useEffect(() => {
+    if (user && !userName) {
+      setUserName(user.name || user.email?.split('@')[0] || '');
+    }
+  }, [user, userName]);
 
   /**
    * Check for existing session in localStorage
@@ -114,8 +123,20 @@ const JoinPage: React.FC = () => {
     setError(null);
 
     try {
+      // Get Okta token if authenticated
+      let oktaToken: string | null = null;
+      try {
+        if (isAuthenticated) {
+          oktaToken = await getAccessToken();
+        }
+      } catch (error) {
+        console.log('Could not get access token, proceeding without auth');
+      }
+
       const request: JoinRoomRequest = {
-        userName: userName.trim()
+        userName: userName.trim(),
+        oktaToken: oktaToken || undefined,
+        email: user?.email || undefined
       };
 
       const response = await fetch(`/api/rooms/${roomId}/join`, {

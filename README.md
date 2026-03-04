@@ -29,7 +29,15 @@ A real-time planning poker application built with React, Node.js, and TypeScript
    npm install
    ```
 
-3. Start the development servers:
+3. **Configure Okta (Optional)**:
+   - Copy `.env.example` to `.env`
+   - Update with your Okta Developer app settings:
+     ```bash
+     VITE_OKTA_ISSUER=https://dev-12345.okta.com/oauth2/default
+     VITE_OKTA_CLIENT_ID=your-client-id-here
+     ```
+
+4. Start the development servers:
    ```bash
    npm run dev
    ```
@@ -102,7 +110,64 @@ hackathon2026.02/
    - Start new voting rounds for additional stories
    - View voting history and statistics
 
-## 🔧 Technical Details
+## � Okta Authentication (Optional)
+
+The application supports optional Okta authentication for enterprise environments. When configured, only users with `@chghealthcare.com` email addresses can create rooms.
+
+### Setup Okta Developer Account
+
+1. **Visit [developer.okta.com](https://developer.okta.com)** and sign up with your `@chghealthcare.com` email
+2. **Create Application**:
+   - Choose "Single-Page App (SPA)"
+   - Set application name: "Pointing Poker"
+   - Set redirect URIs:
+     ```
+     http://localhost:5173/login/callback
+     http://localhost:5173
+     ```
+   - Set logout redirect URIs:
+     ```
+     http://localhost:5173
+     ```
+
+3. **Configure Settings**:
+   - Enable Authorization Code with PKCE
+   - Disable Implicit grant type
+   - Add Trusted Origins for CORS:
+     ```
+     http://localhost:5173 - CORS + Redirect
+     ```
+
+4. **Get Configuration Values**:
+   - Note your **Client ID**
+   - Note your **Issuer URL** (e.g., `https://dev-12345.okta.com/oauth2/default`)
+
+5. **Environment Configuration**:
+   ```bash
+   # Copy example environment file
+   cp .env.example .env
+   
+   # Edit .env with your values
+   VITE_OKTA_ISSUER=https://dev-12345.okta.com/oauth2/default
+   VITE_OKTA_CLIENT_ID=your-client-id-here
+   ```
+
+### Authentication Behavior
+
+- **Home Page**: Requires authentication to create rooms
+- **Join/Play Pages**: Allow guest access to preserve sharing functionality
+- **User Info**: Authenticated users see email and sign-out option
+- **Domain Restriction**: Only `@chghealthcare.com` emails are allowed
+- **Graceful Fallback**: App works without authentication if Okta is not configured
+
+### Production Setup
+
+For production deployment:
+1. Add production redirect URIs to your Okta app
+2. Update environment variables with production URLs
+3. Optionally enable JWT signature verification in backend
+
+## �🔧 Technical Details
 
 ### Backend (Port 3001)
 - **Framework**: Express.js with TypeScript

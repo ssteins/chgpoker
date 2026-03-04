@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext';
 import type { VotingOption, CreateRoomRequest, CreateRoomResponse } from '../../../shared/types';
 
 import './HomePage.css';
@@ -10,15 +11,28 @@ import './HomePage.css';
  */
 const HomePage: React.FC = () => {
   const navigate = useNavigate();
+  const { isAuthenticated, user, getAccessToken, logout } = useAuth();
   const [loading, setLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState<string>('');
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    ownerName: '',
+    ownerName: user?.name || user?.email?.split('@')[0] || '', // Pre-fill from Okta
     votingOption: 'fibonacci' as VotingOption,
     customVotingValues: ''
   });
+
+  /**
+   * Update form when user info changes
+   */
+  useEffect(() => {
+    if (user && !formData.ownerName) {
+      setFormData(prev => ({
+        ...prev,
+        ownerName: user.name || user.email?.split('@')[0] || ''
+      }));
+    }
+  }, [user, formData.ownerName]);
 
   /**
    * Handle form input changes
@@ -48,6 +62,16 @@ const HomePage: React.FC = () => {
     setLoading(true);
 
     try {
+      // Get Okta token if authenticated
+      let oktaToken: string | null = null;
+      try {
+        if (isAuthenticated) {
+          oktaToken = await getAccessToken();
+        }
+      } catch (error) {
+        console.log('Could not get access token, proceeding without auth');
+      }
+
       const request: CreateRoomRequest = {
         title: formData.title || 'Planning Poker Session',
         description: formData.description,
@@ -55,7 +79,10 @@ const HomePage: React.FC = () => {
         votingOption: formData.votingOption,
         customVotingValues: formData.votingOption === 'custom' 
           ? formData.customVotingValues.split(',').map(v => v.trim()).filter(Boolean)
-          : []
+          : [],
+        // Include Okta info if available
+        oktaToken: oktaToken || undefined,
+        email: user?.email || undefined
       };
 
       const response = await fetch('/api/rooms', {
@@ -88,6 +115,22 @@ const HomePage: React.FC = () => {
   return (
     <div className="home-page">
       <div className="home-container">
+        {/* User info header */}
+        {isAuthenticated && user && (
+          <div className="user-header">
+            <div className="user-info">
+              <span className="user-email">{user.email}</span>
+              <button 
+                onClick={logout} 
+                className="logout-button"
+                type="button"
+              >
+                Sign Out
+              </button>
+            </div>
+          </div>
+        )}
+        
         <div className="home-header">
           <h1 className="home-title">🃏 Pointing Poker</h1>
           <p className="home-subtitle">

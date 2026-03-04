@@ -15,6 +15,8 @@ export interface User {
   hasVoted: boolean;
   vote?: string | number;
   joinedAt: Date;
+  email?: string; // From Okta authentication
+  oktaId?: string; // Okta user ID
 }
 
 /**
@@ -79,6 +81,8 @@ export interface CreateRoomRequest {
   ownerName: string;
   votingOption: VotingOption;
   customVotingValues?: string[];
+  oktaToken?: string; // Optional Okta JWT token
+  email?: string; // From Okta authentication
 }
 
 export interface CreateRoomResponse {
@@ -89,6 +93,8 @@ export interface CreateRoomResponse {
 export interface JoinRoomRequest {
   userName: string;
   existingUserId?: string;
+  oktaToken?: string; // Optional Okta JWT token
+  email?: string; // From Okta authentication
 }
 
 export interface JoinRoomResponse {

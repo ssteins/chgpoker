@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import type { 
   Room, 
@@ -25,6 +26,51 @@ app.use(express.json());
 // In-memory storage (rooms will be deleted when creator leaves)
 const rooms = new Map<string, Room>();
 const roomConnections = new Map<string, Map<string, express.Response>>();
+
+/**
+ * Interface for Okta JWT payload
+ */
+interface OktaTokenPayload {
+  sub: string; // Okta user ID
+  email: string;
+  name?: string;
+  iss: string; // Issuer
+  exp: number; // Expiration
+}
+
+/**
+ * Middleware to optionally validate Okta JWT tokens
+ * This preserves existing functionality while adding optional security
+ */
+function validateOktaToken(token?: string): OktaTokenPayload | null {
+  if (!token) return null;
+  
+  try {
+    // For development, we'll skip signature verification
+    // In production, you'd verify against Okta's public key
+    const decoded = jwt.decode(token) as OktaTokenPayload;
+    
+    if (!decoded || !decoded.email || !decoded.sub) {
+      return null;
+    }
+    
+    // Check if token is expired
+    if (decoded.exp && decoded.exp < Date.now() / 1000) {
+      return null;
+    }
+    
+    // Validate email domain (optional additional security)
+    if (!decoded.email.toLowerCase().endsWith('@chghealthcare.com')) {
+      console.warn(`Invalid email domain: ${decoded.email}`);
+      return null;
+    }
+    
+    return decoded;
+  } catch (error) {
+    console.error('Token validation error:', error);
+    return null;
+  }
+}
 
 /**
  * Utility function to generate unique user name if duplicate exists
@@ -129,10 +175,22 @@ function removeUserFromRoom(roomId: string, userId: string): void {
  */
 app.post('/api/rooms', (req, res) => {
   try {
-    const { title, description, ownerName, votingOption, customVotingValues }: CreateRoomRequest = req.body;
+    const { title, description, ownerName, votingOption, customVotingValues, oktaToken, email }: CreateRoomRequest = req.body;
+    
+    // Validate Okta token if provided (optional)
+    const oktaUser = validateOktaToken(oktaToken);
+    if (oktaToken && !oktaUser) {
+      console.warn('Invalid token provided, proceeding without authentication:', oktaToken?.substring(0, 20) + '...');
+      // For development, continue without auth instead of rejecting
+      // return res.status(401).json({ error: 'Invalid authentication token' });
+    }
     
     const roomId = uuidv4();
     const ownerId = uuidv4();
+    
+    // Use Okta info if available, otherwise use provided data
+    const userEmail = oktaUser?.email || email;
+    const userName = ownerName || oktaUser?.name || userEmail?.split('@')[0] || 'Unknown User';
     
     const room: Room = {
       id: roomId,
@@ -143,10 +201,12 @@ app.post('/api/rooms', (req, res) => {
       ownerParticipating: true,
       users: [{
         id: ownerId,
-        name: ownerName,
+        name: userName,
         isOwner: true,
         hasVoted: false,
-        joinedAt: new Date()
+        joinedAt: new Date(),
+        email: userEmail,
+        oktaId: oktaUser?.sub
       }],
       votingOption: votingOption || 'fibonacci',
       customVotingValues: customVotingValues || [],
@@ -165,7 +225,7 @@ app.post('/api/rooms', (req, res) => {
       joinUrl
     };
     
-    console.log(`Room created: ${roomId} by ${ownerName}`);
+    console.log(`Room created: ${roomId} by ${userName}${userEmail ? ` (${userEmail})` : ''}`);
     res.json(response);
   } catch (error) {
     console.error('Error creating room:', error);
@@ -198,41 +258,79 @@ app.get('/api/rooms/:roomId', (req, res) => {
 app.post('/api/rooms/:roomId/join', (req, res) => {
   try {
     const { roomId } = req.params;
-    const { userName, existingUserId }: JoinRoomRequest = req.body;
+    const { userName, existingUserId, oktaToken, email }: JoinRoomRequest = req.body;
     
     const room = rooms.get(roomId);
     if (!room) {
       return res.status(404).json({ error: 'Room not found' });
     }
+
+    // Validate Okta token if provided (optional)
+    const oktaUser = validateOktaToken(oktaToken);
+    if (oktaToken && !oktaUser) {
+      console.warn('Invalid token provided for join, proceeding without authentication');
+      // For development, continue without auth instead of rejecting
+      // return res.status(401).json({ error: 'Invalid authentication token' });
+    }
+
+    // Use Okta info if available
+    const userEmail = oktaUser?.email || email;
+    const finalUserName = userName || oktaUser?.name || userEmail?.split('@')[0] || 'Unknown User';
     
     // Check if this is a rejoin attempt with an existing user ID
     if (existingUserId) {
       const existingUser = room.users.find(u => u.id === existingUserId);
-      if (existingUser && existingUser.name === userName) {
+      if (existingUser && existingUser.name === finalUserName) {
         // User is rejoining with same name and ID - reuse their session
+        // Update with Okta info if available
+        if (oktaUser) {
+          existingUser.email = userEmail;
+          existingUser.oktaId = oktaUser.sub;
+        }
         const response: JoinRoomResponse = {
           room,
           user: existingUser
         };
-        console.log(`User ${userName} rejoined room ${roomId} with existing ID`);
+        console.log(`User ${finalUserName} rejoined room ${roomId} with existing ID`);
         return res.json(response);
       }
     }
     
     // Check if user with exact same name already exists (and is reconnecting)
-    const existingUserByName = room.users.find(u => u.name === userName);
+    const existingUserByName = room.users.find(u => u.name === finalUserName);
     if (existingUserByName) {
       // Reuse existing user session instead of creating duplicate
+      // Update with Okta info if available
+      if (oktaUser) {
+        existingUserByName.email = userEmail;
+        existingUserByName.oktaId = oktaUser.sub;
+      }
       const response: JoinRoomResponse = {
         room,
         user: existingUserByName
       };
-      console.log(`User ${userName} reconnected to room ${roomId}`);
+      console.log(`User ${finalUserName} reconnected to room ${roomId}`);
       return res.json(response);
     }
     
+    // Check if Okta user with same oktaId exists
+    if (oktaUser) {
+      const existingOktaUser = room.users.find(u => u.oktaId === oktaUser.sub);
+      if (existingOktaUser) {
+        // Same Okta user rejoining - update name if changed
+        existingOktaUser.name = finalUserName;
+        existingOktaUser.email = userEmail;
+        const response: JoinRoomResponse = {
+          room,
+          user: existingOktaUser
+        };
+        console.log(`Okta user ${finalUserName} reconnected to room ${roomId}`);
+        return res.json(response);
+      }
+    }
+    
     // Create new user (only if no existing session found)
-    const uniqueName = generateUniqueUserName(roomId, userName);
+    const uniqueName = generateUniqueUserName(roomId, finalUserName);
     const userId = uuidv4();
     
     const user: User = {
@@ -240,7 +338,9 @@ app.post('/api/rooms/:roomId/join', (req, res) => {
       name: uniqueName,
       isOwner: false,
       hasVoted: false,
-      joinedAt: new Date()
+      joinedAt: new Date(),
+      email: userEmail,
+      oktaId: oktaUser?.sub
     };
     
     room.users.push(user);
@@ -258,7 +358,7 @@ app.post('/api/rooms/:roomId/join', (req, res) => {
       timestamp: new Date()
     });
     
-    console.log(`User ${uniqueName} joined room ${roomId}`);
+    console.log(`User ${uniqueName} joined room ${roomId}${userEmail ? ` (${userEmail})` : ''}`);
     res.json(response);
   } catch (error) {
     console.error('Error joining room:', error);

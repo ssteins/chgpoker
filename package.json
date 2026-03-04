@@ -18,5 +18,11 @@
   "devDependencies": {
     "concurrently": "^8.2.2",
     "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "@okta/okta-auth-js": "^7.14.1",
+    "@okta/okta-react": "^6.10.0",
+    "@types/jsonwebtoken": "^9.0.10",
+    "jsonwebtoken": "^9.0.3"
   }
 }
