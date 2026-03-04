@@ -3,6 +3,9 @@ import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import dotenv from 'dotenv';
+import rateLimit from 'express-rate-limit';
+import { body, param, query, validationResult } from 'express-validator';
+import helmet from 'helmet';
 import type { 
   Room, 
   User, 
@@ -17,15 +20,68 @@ import type {
 } from '../../shared/types';
 import { calculateVoteStats } from '../../shared/types';
 
+// Extend Express Request interface to include Okta user
+declare global {
+  namespace Express {
+    interface Request {
+      oktaUser?: {
+        sub: string;
+        email: string;
+        name?: string;
+        iss: string;
+        exp: number;
+      };
+    }
+  }
+}
+
 // Load environment variables
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const NODE_ENV = process.env.NODE_ENV || 'development';
 
-// Middleware
-app.use(cors());
-app.use(express.json());
+// Security middleware
+app.use(helmet({
+  contentSecurityPolicy: false, // Disable for development
+  crossOriginEmbedderPolicy: false // Allow SSE in development
+}));
+
+// CORS configuration
+const corsOptions = {
+  origin: NODE_ENV === 'production' 
+    ? process.env.FRONTEND_URL || 'https://your-domain.com'
+    : ['http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173'],
+  credentials: true
+};
+app.use(cors(corsOptions));
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: NODE_ENV === 'development' ? 1 * 60 * 1000 : 15 * 60 * 1000, // 1min dev, 15min prod
+  max: NODE_ENV === 'development' ? 200 : 100, // More requests allowed in dev
+  message: 'Too many requests, please try again later.'
+});
+app.use('/api', limiter);
+
+// Body parsing middleware
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Input validation error handler
+const handleValidationErrors = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    console.log('Validation errors for', req.method, req.path, ':', errors.array());
+    return res.status(400).json({ 
+      error: 'Validation failed', 
+      details: errors.array(),
+      help: NODE_ENV === 'development' ? 'Check request body, params, and query parameters match API requirements' : undefined
+    });
+  }
+  next();
+};
 
 // In-memory storage (rooms will be deleted when creator leaves)
 const rooms = new Map<string, Room>();
@@ -43,42 +99,107 @@ interface OktaTokenPayload {
 }
 
 /**
- * Middleware to optionally validate Okta JWT tokens
- * This preserves existing functionality while adding optional security
+ * Middleware to validate Okta JWT tokens
+ * Development: validates structure, expiration, and claims (signature verification requires Okta public key setup)
+ * Production: should include full signature verification against Okta's public key
  */
 function validateOktaToken(token?: string): OktaTokenPayload | null {
-  if (!token) return null;
-  
-  try {
-    // For development, we'll skip signature verification
-    // In production, you'd verify against Okta's public key
-    const decoded = jwt.decode(token) as OktaTokenPayload;
-    
-    console.log('Token validation - decoded payload:', {
-      sub: decoded?.sub,
-      email: decoded?.email,
-      exp: decoded?.exp,
-      iss: decoded?.iss
-    });
-    
-    if (!decoded || !decoded.sub) {
-      console.log('Token validation failed: missing decoded data or sub');
-      return null;
-    }
-    
-    // Check if token is expired
-    if (decoded.exp && decoded.exp < Date.now() / 1000) {
-      console.log('Token validation failed: token expired');
-      return null;
-    }
-    
-    // Domain validation is handled by Okta policies - no additional filtering needed
-    console.log('Token validation successful - email:', decoded.email || 'not provided');
-    return decoded;
-  } catch (error) {
-    console.log('Token validation error:', error);
+  if (!token) {
+    console.log('Token validation failed: no token provided');
     return null;
   }
+  
+  try {
+    console.log('Validating token:', token.substring(0, 50) + '...');
+    
+    // Parse and validate token structure and claims
+    // Note: Full signature verification requires Okta public key configuration
+    const decoded = jwt.decode(token, { complete: true });
+    
+    if (!decoded || typeof decoded === 'string' || !decoded.payload) {
+      console.log('Token validation failed: invalid token structure');
+      return null;
+    }
+    
+    const payload = decoded.payload as OktaTokenPayload;
+    
+    // Validate required claims
+    if (!payload.sub || !payload.iss || !payload.exp) {
+      console.log('Token validation failed: missing required claims', {
+        hasSub: !!payload.sub,
+        hasIss: !!payload.iss,
+        hasExp: !!payload.exp
+      });
+      return null;
+    }
+    
+    console.log('Token validation - decoded payload:', {
+      sub: payload?.sub?.substring(0, 10) + '...',
+      email: payload?.email,
+      exp: payload?.exp,
+      iss: payload?.iss,
+      expDate: new Date(payload.exp * 1000).toISOString()
+    });
+    
+    // Check token expiration
+    if (payload.exp && payload.exp < Date.now() / 1000) {
+      console.log('Token validation failed: token expired at', new Date(payload.exp * 1000).toISOString());
+      return null;
+    }
+    
+    // Domain validation handled by Okta policies
+    console.log('Token validation successful - email:', payload.email || 'not provided');
+    return payload;
+  } catch (error) {
+    console.log('Token validation error:', error instanceof Error ? error.message : String(error));
+    return null;
+  }
+}
+
+/**
+ * Authentication middleware - requires valid Okta token
+ */
+function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const { oktaToken } = req.body;
+  
+  console.log('Authentication check:', {
+    hasToken: !!oktaToken,
+    tokenLength: oktaToken?.length,
+    endpoint: req.path,
+    method: req.method
+  });
+  
+  if (!oktaToken) {
+    console.log('Authentication failed: no oktaToken in request body');
+    return res.status(401).json({ error: 'Authentication required', details: 'oktaToken is required in request body' });
+  }
+  
+  const oktaUser = validateOktaToken(oktaToken);
+  if (!oktaUser) {
+    console.log('Authentication failed: token validation failed');
+    return res.status(401).json({ error: 'Invalid authentication token', details: 'Token validation failed - check server logs' });
+  }
+  
+  console.log('Authentication successful for user:', oktaUser.email);
+  // Store user info for use in route handler
+  req.oktaUser = oktaUser;
+  next();
+}
+
+/**
+ * Optional authentication middleware - validates token if present
+ */
+function optionalAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const { oktaToken } = req.body;
+  
+  if (oktaToken) {
+    const oktaUser = validateOktaToken(oktaToken);
+    if (oktaUser) {
+      req.oktaUser = oktaUser;
+    }
+  }
+  
+  next();
 }
 
 /**
@@ -180,30 +301,32 @@ function removeUserFromRoom(roomId: string, userId: string): void {
 // API Routes
 
 /**
- * Create a new poker room
+ * Create a new poker room - REQUIRES AUTHENTICATION
  */
-app.post('/api/rooms', (req, res) => {
+app.post('/api/rooms', 
+  [
+    body('title').optional().isString().trim().isLength({ max: 100 }),
+    body('description').optional().isString().trim().isLength({ max: 500 }),
+    body('ownerName').optional().isString().trim().isLength({ max: 50 }),
+    body('email').optional().isEmail().normalizeEmail(),
+    body('oktaToken').isString().notEmpty(),
+    handleValidationErrors,
+    requireAuth
+  ],
+  (req: express.Request, res: express.Response) => {
   try {
-    const { title, description, ownerName, votingOption, customVotingValues, oktaToken, email }: CreateRoomRequest = req.body;
+    const { title, description, ownerName, votingOption, customVotingValues, email }: CreateRoomRequest = req.body;
+    const oktaUser = req.oktaUser; // Set by requireAuth middleware
     
     console.log('Room creation request:', {
-      hasToken: !!oktaToken,
-      tokenPreview: oktaToken?.substring(0, 50) + '...',
-      email,
-      ownerName
+      email: oktaUser?.email,
+      ownerName: ownerName || oktaUser?.name
     });
-    
-    // Validate Okta token if provided (optional)
-    const oktaUser = validateOktaToken(oktaToken);
-    if (oktaToken && !oktaUser) {
-      console.log('Token validation failed, rejecting request');
-      return res.status(401).json({ error: 'Invalid authentication token' });
-    }
     
     const roomId = uuidv4();
     const ownerId = uuidv4();
     
-    // Use Okta info if available, otherwise use provided data
+    // Use Okta info
     const userEmail = oktaUser?.email || email;
     const userName = ownerName || oktaUser?.name || userEmail?.split('@')[0] || 'Unknown User';
     
@@ -251,7 +374,7 @@ app.post('/api/rooms', (req, res) => {
 /**
  * Get room details
  */
-app.get('/api/rooms/:roomId', (req, res) => {
+app.get('/api/rooms/:roomId', (req: express.Request, res: express.Response) => {
   try {
     const { roomId } = req.params;
     const room = rooms.get(roomId);
@@ -268,31 +391,33 @@ app.get('/api/rooms/:roomId', (req, res) => {
 });
 
 /**
- * Join a room
+ * Join a room - NO AUTH REQUIRED
  */
-app.post('/api/rooms/:roomId/join', (req, res) => {
+app.post('/api/rooms/:roomId/join',
+  [
+    param('roomId').isUUID(),
+    body('userName').optional().isString().trim().isLength({ max: 50 }),
+    body('existingUserId').optional().isUUID(),
+    body('email').optional().isEmail().normalizeEmail(),
+    handleValidationErrors,
+    optionalAuth
+  ],
+  (req: express.Request, res: express.Response) => {
   try {
     const { roomId } = req.params;
-    const { userName, existingUserId, oktaToken, email }: JoinRoomRequest = req.body;
+    const { userName, existingUserId, email }: JoinRoomRequest = req.body;
+    const oktaUser = req.oktaUser; // Optional - set by optionalAuth middleware if token provided
     
     console.log('Room join request:', {
       roomId,
-      hasToken: !!oktaToken,
-      tokenPreview: oktaToken?.substring(0, 50) + '...',
-      email,
+      hasToken: !!oktaUser,
+      email: oktaUser?.email || email,
       userName
     });
     
     const room = rooms.get(roomId);
     if (!room) {
       return res.status(404).json({ error: 'Room not found' });
-    }
-
-    // Validate Okta token if provided (optional)
-    const oktaUser = validateOktaToken(oktaToken);
-    if (oktaToken && !oktaUser) {
-      console.log('Token validation failed for join request');
-      return res.status(401).json({ error: 'Invalid authentication token' });
     }
 
     // Use Okta info if available
@@ -391,7 +516,7 @@ app.post('/api/rooms/:roomId/join', (req, res) => {
 /**
  * Leave a room (explicit user action)
  */
-app.post('/api/rooms/:roomId/leave', (req, res) => {
+app.post('/api/rooms/:roomId/leave', (req: express.Request, res: express.Response) => {
   try {
     const { roomId } = req.params;
     const { userId } = req.query;
@@ -410,9 +535,18 @@ app.post('/api/rooms/:roomId/leave', (req, res) => {
 });
 
 /**
- * Remove a user from room (owner only)
+ * Remove a user from room - REQUIRES AUTHENTICATION (owner only)
  */
-app.post('/api/rooms/:roomId/remove-user', (req, res) => {
+app.post('/api/rooms/:roomId/remove-user',
+  [
+    param('roomId').isUUID(),
+    query('userId').isUUID(),
+    body('oktaToken').isString().notEmpty(),
+    body('userIdToRemove').isUUID(),
+    handleValidationErrors,
+    requireAuth
+  ],
+  (req: express.Request, res: express.Response) => {
   try {
     const { roomId } = req.params;
     const { userId } = req.query;
@@ -481,9 +615,16 @@ app.post('/api/rooms/:roomId/remove-user', (req, res) => {
 });
 
 /**
- * Cast a vote
+ * Cast a vote - NO AUTH REQUIRED
  */
-app.post('/api/rooms/:roomId/vote', (req, res) => {
+app.post('/api/rooms/:roomId/vote',
+  [
+    param('roomId').isUUID(),
+    query('userId').isUUID(),
+    body('vote').isString().trim().notEmpty(),
+    handleValidationErrors
+  ],
+  (req: express.Request, res: express.Response) => {
   try {
     const { roomId } = req.params;
     const { userId } = req.query;
@@ -524,9 +665,17 @@ app.post('/api/rooms/:roomId/vote', (req, res) => {
 });
 
 /**
- * Reveal votes (owner only)
+ * Reveal votes - REQUIRES AUTHENTICATION (owner only)
  */
-app.post('/api/rooms/:roomId/reveal', (req, res) => {
+app.post('/api/rooms/:roomId/reveal',
+  [
+    param('roomId').isUUID(),
+    query('userId').isUUID(),
+    body('oktaToken').isString().notEmpty(),
+    handleValidationErrors,
+    requireAuth
+  ],
+  (req: express.Request, res: express.Response) => {
   try {
     const { roomId } = req.params;
     const { userId } = req.query;
@@ -563,9 +712,18 @@ app.post('/api/rooms/:roomId/reveal', (req, res) => {
 });
 
 /**
- * Start new voting session (owner only)
+ * Start new voting session - REQUIRES AUTHENTICATION (owner only)
  */
-app.post('/api/rooms/:roomId/start-voting', (req, res) => {
+app.post('/api/rooms/:roomId/start-voting',
+  [
+    param('roomId').isUUID(),
+    query('userId').isUUID(),
+    body('oktaToken').isString().notEmpty(),
+    body('ownerParticipating').optional().isBoolean(),
+    handleValidationErrors,
+    requireAuth
+  ],
+  (req: express.Request, res: express.Response) => {
   try {
     const { roomId } = req.params;
     const { userId } = req.query;
@@ -612,13 +770,31 @@ app.post('/api/rooms/:roomId/start-voting', (req, res) => {
 });
 
 /**
- * Update room settings (owner only)
+ * Update room settings - REQUIRES AUTHENTICATION (owner only)
  */
-app.put('/api/rooms/:roomId/settings', (req, res) => {
+app.put('/api/rooms/:roomId/settings',
+  [
+    param('roomId').isUUID(),
+    query('userId').isUUID(),
+    body('oktaToken').isString().notEmpty(),
+    body('title').optional().isString().trim().isLength({ max: 100 }),
+    body('description').optional().isString().trim().isLength({ max: 500 }),
+    body('jiraId').optional().isString().trim().isLength({ max: 50 }),
+    handleValidationErrors,
+    requireAuth
+  ],
+  (req: express.Request, res: express.Response) => {
   try {
     const { roomId } = req.params;
     const { userId } = req.query;
     const { title, description, jiraId } = req.body;
+    
+    console.log('Room settings update request:', {
+      roomId,
+      userId,
+      hasAuthenticatedUser: !!req.oktaUser,
+      changes: { title, description, jiraId }
+    });
     
     const room = rooms.get(roomId);
     if (!room) {
@@ -652,9 +828,15 @@ app.put('/api/rooms/:roomId/settings', (req, res) => {
 });
 
 /**
- * Server-Sent Events endpoint
+ * Server-Sent Events endpoint - Basic validation, no auth required for development
  */
-app.get('/api/rooms/:roomId/events', (req, res) => {
+app.get('/api/rooms/:roomId/events',
+  [
+    param('roomId').isUUID(),
+    query('userId').isUUID(),
+    handleValidationErrors
+  ],
+  (req: express.Request, res: express.Response) => {
   const { roomId } = req.params;
   const { userId } = req.query as { userId: string };
   
@@ -668,13 +850,16 @@ app.get('/api/rooms/:roomId/events', (req, res) => {
     return res.status(404).json({ error: 'User not found in room' });
   }
   
-  // Set up SSE headers
+  // Set up SSE headers with better security
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
     'Connection': 'keep-alive',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Cache-Control'
+    'Access-Control-Allow-Origin': NODE_ENV === 'development' 
+      ? req.get('origin') || '*'
+      : process.env.FRONTEND_URL || 'https://your-domain.com',
+    'Access-Control-Allow-Headers': 'Cache-Control',
+    'X-Content-Type-Options': 'nosniff'
   });
   
   // Store connection (replace existing connection if user is reconnecting)
@@ -728,7 +913,7 @@ app.get('/api/rooms/:roomId/events', (req, res) => {
 /**
  * Health check endpoint
  */
-app.get('/api/health', (req, res) => {
+app.get('/api/health', (req: express.Request, res: express.Response) => {
   res.json({ 
     status: 'OK', 
     timestamp: new Date(),

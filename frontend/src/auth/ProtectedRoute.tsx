@@ -27,18 +27,15 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
     return (
       <div className="login-prompt">
         <div className="login-prompt-container">
-          <h1>🃏 Pointing Poker</h1>
+          <h1>Pointing Poker</h1>
           <h2>Sign In Required</h2>
-          <p>Please sign in with your CHG Healthcare email to continue.</p>
+          <p>Please sign in to continue.</p>
           <button 
             onClick={login}
             className="login-button"
           >
             Sign In with Okta
           </button>
-          <p className="login-note">
-            Only @chghealthcare.com email addresses are allowed.
-          </p>
         </div>
       </div>
     );

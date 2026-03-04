@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext';
 import type { Room, User, SSEEvent, VoteStats } from '../../../shared/types';
 import './RoomPage.css';
 
@@ -11,6 +12,7 @@ const RoomPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const userId = searchParams.get('userId');
+  const { getAccessToken } = useAuth();
   
   const [room, setRoom] = useState<Room | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -54,6 +56,16 @@ const RoomPage: React.FC = () => {
       }
     } catch (e) {}
     return null;
+  };
+
+  // Helper function to get auth token for protected requests
+  const getAuthToken = async (): Promise<string | null> => {
+    try {
+      return await getAccessToken();
+    } catch (error) {
+      console.error('Failed to get auth token:', error);
+      return null;
+    }
   };
 
   useEffect(() => {
@@ -266,7 +278,7 @@ const RoomPage: React.FC = () => {
       const response = await fetch(`/api/rooms/${roomId}/vote?userId=${userId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vote })
+        body: JSON.stringify({ vote: String(vote) })
       });
       
       if (!response.ok) throw new Error('Failed to cast vote');
@@ -307,8 +319,17 @@ const RoomPage: React.FC = () => {
 
   const handleStartVoting = async () => {
     try {
+      const oktaToken = await getAuthToken();
+      if (!oktaToken) {
+        setActionMessage('Authentication required to start voting');
+        setTimeout(() => setActionMessage(null), 3000);
+        return;
+      }
+
       const response = await fetch(`/api/rooms/${roomId}/start-voting?userId=${userId}`, {
-        method: 'POST'
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oktaToken, ownerParticipating })
       });
       if (!response.ok) throw new Error('Failed to start voting');
       setSelectedVote(null);
@@ -323,11 +344,18 @@ const RoomPage: React.FC = () => {
   const handleStartVotingWithStory = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const oktaToken = await getAuthToken();
+      if (!oktaToken) {
+        setActionMessage('Authentication required to update room and start voting');
+        setTimeout(() => setActionMessage(null), 3000);
+        return;
+      }
+
       // Update room details first
       const roomResponse = await fetch(`/api/rooms/${roomId}/settings?userId=${userId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(roomForm)
+        body: JSON.stringify({ ...roomForm, oktaToken })
       });
       if (!roomResponse.ok) throw new Error('Failed to update room');
 
@@ -335,7 +363,7 @@ const RoomPage: React.FC = () => {
       const voteResponse = await fetch(`/api/rooms/${roomId}/start-voting?userId=${userId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ownerParticipating })
+        body: JSON.stringify({ oktaToken, ownerParticipating })
       });
       if (!voteResponse.ok) throw new Error('Failed to start voting');
       
@@ -350,8 +378,17 @@ const RoomPage: React.FC = () => {
 
   const handleRevealVotes = async () => {
     try {
+      const oktaToken = await getAuthToken();
+      if (!oktaToken) {
+        setActionMessage('Authentication required to reveal votes');
+        setTimeout(() => setActionMessage(null), 3000);
+        return;
+      }
+
       const response = await fetch(`/api/rooms/${roomId}/reveal?userId=${userId}`, {
-        method: 'POST'
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ oktaToken })
       });
       if (!response.ok) throw new Error('Failed to reveal votes');
     } catch (err) {
@@ -363,10 +400,17 @@ const RoomPage: React.FC = () => {
   const handleUpdateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const oktaToken = await getAuthToken();
+      if (!oktaToken) {
+        setActionMessage('Authentication required to update room');
+        setTimeout(() => setActionMessage(null), 3000);
+        return;
+      }
+
       const response = await fetch(`/api/rooms/${roomId}/settings?userId=${userId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(roomForm)
+        body: JSON.stringify({ ...roomForm, oktaToken })
       });
       if (!response.ok) throw new Error('Failed to update room');
       setEditingRoom(false);
@@ -420,10 +464,17 @@ const RoomPage: React.FC = () => {
     if (!confirm(`Remove ${userName} from the room?`)) return;
     
     try {
+      const oktaToken = await getAuthToken();
+      if (!oktaToken) {
+        setActionMessage('Authentication required to remove user');
+        setTimeout(() => setActionMessage(null), 3000);
+        return;
+      }
+
       const response = await fetch(`/api/rooms/${roomId}/remove-user?userId=${userId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userIdToRemove })
+        body: JSON.stringify({ userIdToRemove, oktaToken })
       });
       
       if (!response.ok) throw new Error('Failed to remove user');
