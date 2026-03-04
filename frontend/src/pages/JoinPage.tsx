@@ -63,7 +63,10 @@ const JoinPage: React.FC = () => {
               const rejoinResponse = await fetch(`/api/rooms/${roomId}/join`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userName: existingSession.userName })
+                body: JSON.stringify({ 
+                  userName: existingSession.userName,
+                  existingUserId: existingSession.userId 
+                })
               });
               if (rejoinResponse.ok) {
                 const rejoinData = await rejoinResponse.json();

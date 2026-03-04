@@ -205,9 +205,39 @@
   color: #1d1d1f;
 }
 
+.user-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .user-status {
   display: flex;
   align-items: center;
+}
+
+.btn-remove-user {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.6;
+  transition: all 0.2s ease;
+  font-size: 12px;
+}
+
+.btn-remove-user:hover {
+  opacity: 1;
+  background: rgba(255, 59, 48, 0.1);
+  transform: scale(1.1);
+}
+
+.btn-remove-user:active {
+  transform: scale(0.9);
 }
 
 .vote-status {

@@ -194,7 +194,20 @@ const RoomPage: React.FC = () => {
     
     switch (event.type) {
       case 'room-updated':
-        if (!event.data.message) {
+        if (event.data.message) {
+          // Handle removal or other message events
+          if (event.data.message.includes('removed from the room')) {
+            setActionMessage(event.data.message);
+            setTimeout(() => {
+              navigate('/', { replace: true });
+            }, 3000);
+          } else if (event.data.message.includes('closed by the owner')) {
+            setActionMessage('Room has been closed by the owner');
+            setTimeout(() => {
+              navigate('/', { replace: true });
+            }, 3000);
+          }
+        } else {
           setRoom(event.data);
           // Clear selected vote when a new voting round starts
           if (event.data.isVotingActive && !event.data.votesRevealed) {
@@ -397,6 +410,26 @@ const RoomPage: React.FC = () => {
       setTimeout(() => setCopyIndicator(false), 2000);
     } catch (err) {
       setActionMessage('Failed to copy link');
+      setTimeout(() => setActionMessage(null), 3000);
+    }
+  };
+
+  const handleRemoveUser = async (userIdToRemove: string, userName: string) => {
+    if (!room || !currentUser || !currentUser.isOwner) return;
+    
+    if (!confirm(`Remove ${userName} from the room?`)) return;
+    
+    try {
+      const response = await fetch(`/api/rooms/${roomId}/remove-user?userId=${userId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userIdToRemove })
+      });
+      
+      if (!response.ok) throw new Error('Failed to remove user');
+      
+    } catch (err) {
+      setActionMessage('Failed to remove user');
       setTimeout(() => setActionMessage(null), 3000);
     }
   };
@@ -658,19 +691,30 @@ const RoomPage: React.FC = () => {
                     {user.name}
                     {user.isOwner && ' 👑'}
                   </span>
-                  <div className="user-status">
-                    {room.isVotingActive ? (
-                      user.isOwner && !room.ownerParticipating ? (
-                        <span className="vote-status observer">👀</span>
-                      ) : user.hasVoted ? (
-                        <span className="vote-status voted">✅</span>
+                  <div className="user-actions">
+                    <div className="user-status">
+                      {room.isVotingActive ? (
+                        user.isOwner && !room.ownerParticipating ? (
+                          <span className="vote-status observer">👀</span>
+                        ) : user.hasVoted ? (
+                          <span className="vote-status voted">✅</span>
+                        ) : (
+                          <span className="vote-status pending">⏳</span>
+                        )
                       ) : (
-                        <span className="vote-status pending">⏳</span>
-                      )
-                    ) : (
-                      room.votesRevealed && user.vote !== undefined && (
-                        <span className="vote-value">{user.vote}</span>
-                      )
+                        room.votesRevealed && user.vote !== undefined && (
+                          <span className="vote-value">{user.vote}</span>
+                        )
+                      )}
+                    </div>
+                    {currentUser.isOwner && !user.isOwner && (
+                      <button
+                        onClick={() => handleRemoveUser(user.id, user.name)}
+                        className="btn-remove-user"
+                        title={`Remove ${user.name}`}
+                      >
+                        ❌
+                      </button>
                     )}
                   </div>
                 </div>

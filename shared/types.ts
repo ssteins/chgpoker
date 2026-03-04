@@ -88,6 +88,7 @@ export interface CreateRoomResponse {
 
 export interface JoinRoomRequest {
   userName: string;
+  existingUserId?: string;
 }
 
 export interface JoinRoomResponse {

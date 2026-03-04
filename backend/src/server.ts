@@ -69,6 +69,18 @@ function sendSSEToRoom(roomId: string, event: SSEEvent): void {
 }
 
 /**
+ * Send SSE event to a specific user
+ */
+function sendSSEToUser(res: express.Response, event: SSEEvent): void {
+  try {
+    const eventData = `data: ${JSON.stringify(event)}\n\n`;
+    res.write(eventData);
+  } catch (error) {
+    console.log('Failed to send SSE to user');
+  }
+}
+
+/**
  * Remove user from room and clean up if owner leaves
  */
 function removeUserFromRoom(roomId: string, userId: string): void {
@@ -186,13 +198,40 @@ app.get('/api/rooms/:roomId', (req, res) => {
 app.post('/api/rooms/:roomId/join', (req, res) => {
   try {
     const { roomId } = req.params;
-    const { userName }: JoinRoomRequest = req.body;
+    const { userName, existingUserId }: JoinRoomRequest = req.body;
     
     const room = rooms.get(roomId);
     if (!room) {
       return res.status(404).json({ error: 'Room not found' });
     }
     
+    // Check if this is a rejoin attempt with an existing user ID
+    if (existingUserId) {
+      const existingUser = room.users.find(u => u.id === existingUserId);
+      if (existingUser && existingUser.name === userName) {
+        // User is rejoining with same name and ID - reuse their session
+        const response: JoinRoomResponse = {
+          room,
+          user: existingUser
+        };
+        console.log(`User ${userName} rejoined room ${roomId} with existing ID`);
+        return res.json(response);
+      }
+    }
+    
+    // Check if user with exact same name already exists (and is reconnecting)
+    const existingUserByName = room.users.find(u => u.name === userName);
+    if (existingUserByName) {
+      // Reuse existing user session instead of creating duplicate
+      const response: JoinRoomResponse = {
+        room,
+        user: existingUserByName
+      };
+      console.log(`User ${userName} reconnected to room ${roomId}`);
+      return res.json(response);
+    }
+    
+    // Create new user (only if no existing session found)
     const uniqueName = generateUniqueUserName(roomId, userName);
     const userId = uuidv4();
     
@@ -245,6 +284,77 @@ app.post('/api/rooms/:roomId/leave', (req, res) => {
   } catch (error) {
     console.error('Error leaving room:', error);
     res.status(500).json({ error: 'Failed to leave room' });
+  }
+});
+
+/**
+ * Remove a user from room (owner only)
+ */
+app.post('/api/rooms/:roomId/remove-user', (req, res) => {
+  try {
+    const { roomId } = req.params;
+    const { userId } = req.query;
+    const { userIdToRemove } = req.body;
+    
+    const room = rooms.get(roomId);
+    if (!room) {
+      return res.status(404).json({ error: 'Room not found' });
+    }
+    
+    const requestingUser = room.users.find(u => u.id === userId);
+    if (!requestingUser || !requestingUser.isOwner) {
+      return res.status(403).json({ error: 'Only room owner can remove users' });
+    }
+    
+    const userToRemove = room.users.find(u => u.id === userIdToRemove);
+    if (!userToRemove) {
+      return res.status(404).json({ error: 'User not found in room' });
+    }
+    
+    if (userToRemove.isOwner) {
+      return res.status(403).json({ error: 'Cannot remove room owner' });
+    }
+    
+    // Send notification to the user being removed first
+    const userConnection = roomConnections.get(roomId)?.get(userIdToRemove);
+    if (userConnection) {
+      sendSSEToUser(userConnection, {
+        type: 'room-updated',
+        data: { message: 'You have been removed from the room by the owner' },
+        timestamp: new Date()
+      });
+    }
+    
+    // Get user info before removal for the user-left event
+    const userToRemoveData = room.users.find(u => u.id === userIdToRemove);
+    
+    // Remove user from room users list
+    const userIndex = room.users.findIndex(u => u.id === userIdToRemove);
+    if (userIndex !== -1) {
+      room.users.splice(userIndex, 1);
+      rooms.set(roomId, room);
+    }
+    
+    // Notify all remaining users with user-left event (preserves vote states)
+    sendSSEToRoom(roomId, {
+      type: 'user-left',
+      data: { user: userToRemoveData, room },
+      timestamp: new Date()
+    });
+    
+    // Finally, close the removed user's connection
+    if (userConnection) {
+      const connections = roomConnections.get(roomId);
+      if (connections) {
+        connections.delete(userIdToRemove);
+      }
+      userConnection.end();
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error removing user from room:', error);
+    res.status(500).json({ error: 'Failed to remove user' });
   }
 });
 
