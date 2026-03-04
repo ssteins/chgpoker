@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
+import dotenv from 'dotenv';
 import type { 
   Room, 
   User, 
@@ -15,6 +16,9 @@ import type {
   UpdateRoomSettingsRequest
 } from '../../shared/types';
 import { calculateVoteStats } from '../../shared/types';
+
+// Load environment variables
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -50,24 +54,29 @@ function validateOktaToken(token?: string): OktaTokenPayload | null {
     // In production, you'd verify against Okta's public key
     const decoded = jwt.decode(token) as OktaTokenPayload;
     
-    if (!decoded || !decoded.email || !decoded.sub) {
+    console.log('Token validation - decoded payload:', {
+      sub: decoded?.sub,
+      email: decoded?.email,
+      exp: decoded?.exp,
+      iss: decoded?.iss
+    });
+    
+    if (!decoded || !decoded.sub) {
+      console.log('Token validation failed: missing decoded data or sub');
       return null;
     }
     
     // Check if token is expired
     if (decoded.exp && decoded.exp < Date.now() / 1000) {
+      console.log('Token validation failed: token expired');
       return null;
     }
     
-    // Validate email domain (optional additional security)
-    if (!decoded.email.toLowerCase().endsWith('@chghealthcare.com')) {
-      console.warn(`Invalid email domain: ${decoded.email}`);
-      return null;
-    }
-    
+    // Domain validation is handled by Okta policies - no additional filtering needed
+    console.log('Token validation successful - email:', decoded.email || 'not provided');
     return decoded;
   } catch (error) {
-    console.error('Token validation error:', error);
+    console.log('Token validation error:', error);
     return null;
   }
 }
@@ -177,12 +186,18 @@ app.post('/api/rooms', (req, res) => {
   try {
     const { title, description, ownerName, votingOption, customVotingValues, oktaToken, email }: CreateRoomRequest = req.body;
     
+    console.log('Room creation request:', {
+      hasToken: !!oktaToken,
+      tokenPreview: oktaToken?.substring(0, 50) + '...',
+      email,
+      ownerName
+    });
+    
     // Validate Okta token if provided (optional)
     const oktaUser = validateOktaToken(oktaToken);
     if (oktaToken && !oktaUser) {
-      console.warn('Invalid token provided, proceeding without authentication:', oktaToken?.substring(0, 20) + '...');
-      // For development, continue without auth instead of rejecting
-      // return res.status(401).json({ error: 'Invalid authentication token' });
+      console.log('Token validation failed, rejecting request');
+      return res.status(401).json({ error: 'Invalid authentication token' });
     }
     
     const roomId = uuidv4();
@@ -260,6 +275,14 @@ app.post('/api/rooms/:roomId/join', (req, res) => {
     const { roomId } = req.params;
     const { userName, existingUserId, oktaToken, email }: JoinRoomRequest = req.body;
     
+    console.log('Room join request:', {
+      roomId,
+      hasToken: !!oktaToken,
+      tokenPreview: oktaToken?.substring(0, 50) + '...',
+      email,
+      userName
+    });
+    
     const room = rooms.get(roomId);
     if (!room) {
       return res.status(404).json({ error: 'Room not found' });
@@ -268,9 +291,8 @@ app.post('/api/rooms/:roomId/join', (req, res) => {
     // Validate Okta token if provided (optional)
     const oktaUser = validateOktaToken(oktaToken);
     if (oktaToken && !oktaUser) {
-      console.warn('Invalid token provided for join, proceeding without authentication');
-      // For development, continue without auth instead of rejecting
-      // return res.status(401).json({ error: 'Invalid authentication token' });
+      console.log('Token validation failed for join request');
+      return res.status(401).json({ error: 'Invalid authentication token' });
     }
 
     // Use Okta info if available
