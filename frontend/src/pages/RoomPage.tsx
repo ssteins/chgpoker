@@ -31,7 +31,7 @@ const RoomPage: React.FC = () => {
   const eventSourceRef = useRef<EventSource | null>(null);
 
   // Store user data in localStorage for persistence across refreshes
-  const storeUserData = (roomData: Room, userData: User) => {
+  const storeUserData = (_roomData: Room, userData: User) => {
     if (roomId && userId) {
       localStorage.setItem(`poker_user_${roomId}`, JSON.stringify({
         userId: userData.id,
@@ -333,30 +333,6 @@ const RoomPage: React.FC = () => {
     setPreparingVote(true);
   };
 
-  const handleStartVoting = async () => {
-    try {
-      const oktaToken = await getAuthToken();
-      if (!oktaToken) {
-        setActionMessage('Authentication required to start voting');
-        setTimeout(() => setActionMessage(null), 3000);
-        return;
-      }
-
-      const response = await fetch(`/api/rooms/${roomId}/start-voting?userId=${userId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ oktaToken, ownerParticipating })
-      });
-      if (!response.ok) throw new Error('Failed to start voting');
-      setSelectedVote(null);
-      setVoteStats(null);
-      setPreparingVote(false);
-    } catch (err) {
-      setActionMessage('Failed to start voting');
-      setTimeout(() => setActionMessage(null), 3000);
-    }
-  };
-
   const handleStartVotingWithStory = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -553,7 +529,6 @@ const RoomPage: React.FC = () => {
   const votingOptions = getVotingOptions();
   const usersWhoVoted = room.users.filter(u => u.hasVoted).length;
   const eligibleVoters = room.ownerParticipating ? room.users.length : room.users.filter(u => !u.isOwner).length;
-  const totalUsers = room.users.length;
   
   return (
     <div className="room-page">

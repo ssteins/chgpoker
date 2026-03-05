@@ -112,11 +112,11 @@ hackathon2026.02/
 
 ## � Okta Authentication (Optional)
 
-The application supports optional Okta authentication for enterprise environments. When configured, only users with `@chghealthcare.com` email addresses can create rooms.
+The application supports Okta authentication for enterprise environments. Domain restrictions are configured in your Okta organization policies.
 
 ### Setup Okta Developer Account
 
-1. **Visit [developer.okta.com](https://developer.okta.com)** and sign up with your `@chghealthcare.com` email
+1. **Visit [developer.okta.com](https://developer.okta.com)** and sign up with your organization email
 2. **Create Application**:
    - Choose "Single-Page App (SPA)"
    - Set application name: "Pointing Poker"
@@ -157,7 +157,7 @@ The application supports optional Okta authentication for enterprise environment
 - **Home Page**: Requires authentication to create rooms
 - **Join/Play Pages**: Allow guest access to preserve sharing functionality
 - **User Info**: Authenticated users see email and sign-out option
-- **Domain Restriction**: Only `@chghealthcare.com` emails are allowed
+- **Domain Restriction**: Controlled by Okta organization policies
 - **Graceful Fallback**: App works without authentication if Okta is not configured
 
 ### Production Setup
@@ -217,7 +217,7 @@ The application uses an Apple-inspired design system with:
 - [ ] Spectator mode
 - [ ] Emoji reactions
 
-## 🤝 Contributing
+##  Contributing
 
 1. Fork the repository
 2. Create a feature branch
@@ -229,7 +229,7 @@ The application uses an Apple-inspired design system with:
 
 This project is open source and available under the [MIT License](LICENSE).
 
-## 🆘 Troubleshooting
+##  Troubleshooting
 
 ### Common Issues
 

@@ -9,11 +9,14 @@
   ],
   "scripts": {
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:single-port": "cd backend && npm run dev:with-frontend",
     "dev:backend": "cd backend && npm run dev",
     "dev:frontend": "cd frontend && npm run dev",
     "build": "npm run build:backend && npm run build:frontend",
     "build:backend": "cd backend && npm run build",
-    "build:frontend": "cd frontend && npm run build"
+    "build:frontend": "cd frontend && npm run build",
+    "build:single-port": "cd backend && npm run build:frontend && npm run build",
+    "start:single-port": "cd backend && npm start"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

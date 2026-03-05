@@ -69,6 +69,12 @@ app.use('/api', limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Serve static frontend files in production
+if (NODE_ENV === 'production') {
+  const path = require('path');
+  app.use(express.static(path.join(__dirname, '../public')));
+}
+
 // Input validation error handler
 const handleValidationErrors = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const errors = validationResult(req);
@@ -926,6 +932,14 @@ app.get('/api/health', (req: express.Request, res: express.Response) => {
       .reduce((sum, connections) => sum + connections.size, 0)
   });
 });
+
+// Serve React app for all non-API routes (in production)
+if (NODE_ENV === 'production') {
+  const path = require('path');
+  app.get('*', (req: express.Request, res: express.Response) => {
+    res.sendFile(path.join(__dirname, '../public/index.html'));
+  });
+}
 
 // Start server
 app.listen(PORT, () => {
