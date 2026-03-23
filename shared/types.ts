@@ -50,6 +50,23 @@ export interface VoteStats {
 }
 
 /**
+ * Poke projectile types
+ */
+export type PokeProjectile = 'paper-airplane' | 'finger' | 'paper-ball' | 'arrow';
+
+/**
+ * Poke event data
+ */
+export interface PokeData {
+  fromUserId: string;
+  fromUserName: string;
+  toUserId: string;
+  toUserName: string;
+  projectile: PokeProjectile;
+  id: string; // Unique identifier for animation tracking
+}
+
+/**
  * Server-Sent Event types
  */
 export type SSEEventType = 
@@ -61,7 +78,8 @@ export type SSEEventType =
   | 'timer-started' 
   | 'timer-tick' 
   | 'timer-ended'
-  | 'settings-updated';
+  | 'settings-updated'
+  | 'poke';
 
 /**
  * SSE event data structure
@@ -116,6 +134,11 @@ export interface UpdateRoomSettingsRequest {
 
 export interface StartTimerRequest {
   duration: number; // in seconds
+}
+
+export interface PokeRequest {
+  toUserId: string;
+  projectile: PokeProjectile;
 }
 
 /**

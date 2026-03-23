@@ -16,7 +16,10 @@ import type {
   JoinRoomResponse,
   CastVoteRequest,
   StartTimerRequest,
-  UpdateRoomSettingsRequest
+  UpdateRoomSettingsRequest,
+  PokeRequest,
+  PokeData,
+  PokeProjectile
 } from '../../shared/types';
 import { calculateVoteStats } from '../../shared/types';
 
@@ -776,6 +779,65 @@ app.post('/api/rooms/:roomId/start-voting',
   } catch (error) {
     console.error('Error starting voting:', error);
     res.status(500).json({ error: 'Failed to start voting' });
+  }
+});
+
+/**
+ * Poke another user in the room
+ */
+app.post('/api/rooms/:roomId/poke',
+  [
+    param('roomId').isUUID(),
+    query('userId').isUUID(),
+    body('toUserId').isUUID(),
+    body('projectile').isIn(['paper-airplane', 'finger', 'paper-ball', 'arrow']),
+    handleValidationErrors
+  ],
+  (req: express.Request, res: express.Response) => {
+  try {
+    const { roomId } = req.params;
+    const { userId } = req.query;
+    const { toUserId, projectile }: PokeRequest = req.body;
+    
+    const room = rooms.get(roomId);
+    if (!room) {
+      return res.status(404).json({ error: 'Room not found' });
+    }
+    
+    const fromUser = room.users.find(u => u.id === userId);
+    if (!fromUser) {
+      return res.status(403).json({ error: 'User not in room' });
+    }
+    
+    const toUser = room.users.find(u => u.id === toUserId);
+    if (!toUser) {
+      return res.status(400).json({ error: 'Target user not found in room' });
+    }
+    
+    if (fromUser.id === toUser.id) {
+      return res.status(400).json({ error: 'Cannot poke yourself' });
+    }
+    
+    const pokeData: PokeData = {
+      fromUserId: fromUser.id,
+      fromUserName: fromUser.name,
+      toUserId: toUser.id,
+      toUserName: toUser.name,
+      projectile,
+      id: uuidv4()
+    };
+    
+    sendSSEToRoom(roomId, {
+      type: 'poke',
+      data: pokeData,
+      timestamp: new Date()
+    });
+    
+    console.log(`${fromUser.name} poked ${toUser.name} with ${projectile} in room ${roomId}`);
+    res.json({ success: true, poke: pokeData });
+  } catch (error) {
+    console.error('Error sending poke:', error);
+    res.status(500).json({ error: 'Failed to send poke' });
   }
 });
 

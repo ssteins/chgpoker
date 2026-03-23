@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
-import type { Room, User, SSEEvent, VoteStats } from '../../../shared/types';
+import type { Room, User, SSEEvent, VoteStats, PokeData, PokeProjectile } from '../../../shared/types';
 import './RoomPage.css';
 
 /**
@@ -27,8 +27,12 @@ const RoomPage: React.FC = () => {
   const [roomForm, setRoomForm] = useState({ title: '', description: '', jiraId: '' });
   const [copyIndicator, setCopyIndicator] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [activePokes, setActivePokes] = useState<(PokeData & { targetPosition?: { x: number; y: number }; startPosition?: { x: number; y: number } })[]>([]);
+  const [showPokeMenu, setShowPokeMenu] = useState<string | null>(null); // userId of target
+  const [pokeMenuTimer, setPokeMenuTimer] = useState<NodeJS.Timeout | null>(null);
   
   const eventSourceRef = useRef<EventSource | null>(null);
+  const userElementsRef = useRef<Map<string, HTMLElement>>(new Map());
 
   // Store user data in localStorage for persistence across refreshes
   const storeUserData = (_roomData: Room, userData: User) => {
@@ -217,6 +221,15 @@ const RoomPage: React.FC = () => {
     };
   }, [roomId, userId, navigate]);
 
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => {
+      if (pokeMenuTimer) {
+        clearTimeout(pokeMenuTimer);
+      }
+    };
+  }, [pokeMenuTimer]);
+
   const handleSSEEvent = (event: SSEEvent) => {
     console.log('Received SSE event:', event.type, event.data);
     
@@ -283,6 +296,41 @@ const RoomPage: React.FC = () => {
         // setTimerRemaining(null);
         setRoom(event.data.room);
         setVoteStats(event.data.stats);
+        break;
+      case 'poke':
+        const pokeData: PokeData = event.data;
+        
+        // Get target user element position
+        const targetElement = userElementsRef.current.get(pokeData.toUserId);
+        let targetPosition = { x: window.innerWidth / 2, y: window.innerHeight / 2 }; // Default center
+        
+        if (targetElement) {
+          const rect = targetElement.getBoundingClientRect();
+          targetPosition = {
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height / 2
+          };
+        }
+        
+        // Generate random start position on screen edge
+        const randomStartPosition = generateRandomStartPosition(targetPosition);
+        
+        setActivePokes(prev => [...prev, { ...pokeData, targetPosition, startPosition: randomStartPosition }]);
+        
+        // Highlight target user when projectile hits (after animation duration)
+        if (targetElement) {
+          setTimeout(() => {
+            targetElement.classList.add('poke-target');
+            setTimeout(() => {
+              targetElement.classList.remove('poke-target');
+            }, 800);
+          }, 1800); // Adjusted for new animation timing
+        }
+        
+        // Remove the poke after animation completes
+        setTimeout(() => {
+          setActivePokes(prev => prev.filter(p => p.id !== pokeData.id));
+        }, 2500); // Adjusted timing
         break;
     }
   };
@@ -501,6 +549,85 @@ const RoomPage: React.FC = () => {
     }
   };
 
+  const handlePoke = async (toUserId: string, projectile: PokeProjectile) => {
+    try {
+      const response = await fetch(`/api/rooms/${roomId}/poke?userId=${userId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ toUserId, projectile })
+      });
+      
+      if (!response.ok) throw new Error('Failed to send poke');
+      setShowPokeMenu(null); // Close menu after poking
+    } catch (err) {
+      setActionMessage('Failed to send poke');
+      setTimeout(() => setActionMessage(null), 3000);
+    }
+  };
+
+  const handlePokeMouseEnter = (targetUserId: string) => {
+    if (pokeMenuTimer) {
+      clearTimeout(pokeMenuTimer);
+    }
+    setShowPokeMenu(targetUserId);
+  };
+
+  const handlePokeMouseLeave = () => {
+    const timer = setTimeout(() => {
+      setShowPokeMenu(null);
+    }, 300); // Small delay to allow moving to menu
+    setPokeMenuTimer(timer);
+  };
+
+  const handlePokeMenuMouseEnter = () => {
+    if (pokeMenuTimer) {
+      clearTimeout(pokeMenuTimer);
+    }
+  };
+
+  const handlePokeMenuMouseLeave = () => {
+    setShowPokeMenu(null);
+  };
+
+  const generateRandomStartPosition = (targetPosition: { x: number; y: number }) => {
+    const screenWidth = window.innerWidth;
+    const screenHeight = window.innerHeight;
+    const edge = Math.floor(Math.random() * 4); // 0: left, 1: right, 2: top, 3: bottom
+    
+    switch (edge) {
+      case 0: // Left edge
+        return { x: -80, y: Math.random() * screenHeight };
+      case 1: // Right edge
+        return { x: screenWidth + 80, y: Math.random() * screenHeight };
+      case 2: // Top edge
+        return { x: Math.random() * screenWidth, y: -80 };
+      case 3: // Bottom edge
+        return { x: Math.random() * screenWidth, y: screenHeight + 80 };
+      default:
+        return { x: -80, y: screenHeight / 2 };
+    }
+  };
+
+  const getProjectileIcon = (projectile: PokeProjectile) => {
+    switch (projectile) {
+      case 'paper-airplane': return '✈️';
+      case 'finger': return '👉';
+      case 'paper-ball': return '📄';
+      case 'arrow': return '➤';
+      default: return '👉';
+    }
+  };
+
+  const getProjectileLabel = (projectile: PokeProjectile) => {
+    switch (projectile) {
+      case 'paper-airplane': return 'Paper Airplane';
+      case 'finger': return 'Point';
+      case 'paper-ball': return 'Paper Ball';
+      case 'arrow': return 'Arrow';
+      default: return 'Point';
+    }
+  };
+
   if (loading) {
     return (
       <div className="room-page">
@@ -538,6 +665,47 @@ const RoomPage: React.FC = () => {
           {actionMessage}
         </div>
       )}
+      
+      {/* Poke animations */}
+      {activePokes.map((poke) => {
+        const startPos = poke.startPosition || { x: -100, y: window.innerHeight / 2 };
+        const endPos = poke.targetPosition || { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+        
+        // Calculate control point for arc (higher arc for longer distances)
+        const midX = (startPos.x + endPos.x) / 2;
+        const midY = (startPos.y + endPos.y) / 2;
+        const distance = Math.sqrt(Math.pow(endPos.x - startPos.x, 2) + Math.pow(endPos.y - startPos.y, 2));
+        const arcHeight = Math.min(distance * 0.3, 200); // Dynamic arc height
+        const controlY = midY - arcHeight;
+        
+        // Calculate initial direction angle (direction projectile should point)
+        const deltaX = endPos.x - startPos.x;
+        const deltaY = endPos.y - startPos.y;
+        const directionAngle = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
+        
+        return (
+          <div
+            key={poke.id}
+            className="poke-animation"
+            data-projectile={poke.projectile}
+            style={{
+              '--start-x': `${startPos.x}px`,
+              '--start-y': `${startPos.y}px`,
+              '--end-x': `${endPos.x}px`,
+              '--end-y': `${endPos.y}px`,
+              '--mid-x': `${midX}px`,
+              '--mid-y': `${midY}px`,
+              '--control-y': `${controlY}px`,
+              '--distance': `${distance}px`,
+              '--direction': `${directionAngle}deg`,
+            } as React.CSSProperties}
+          >
+            <div className="projectile">
+              {getProjectileIcon(poke.projectile)}
+            </div>
+          </div>
+        );
+      })}
       
       <header className="room-header">
         <div className="room-header-content">
@@ -728,7 +896,17 @@ const RoomPage: React.FC = () => {
             </div>
             <div className="users-list">
               {room.users.map((user) => (
-                <div key={user.id} className="user-item">
+                <div 
+                  key={user.id} 
+                  className="user-item"
+                  ref={(el) => {
+                    if (el) {
+                      userElementsRef.current.set(user.id, el);
+                    } else {
+                      userElementsRef.current.delete(user.id);
+                    }
+                  }}
+                >
                                         {currentUser.isOwner && !user.isOwner && (
                       <button
                         onClick={() => handleRemoveUser(user.id, user.name)}
@@ -758,7 +936,40 @@ const RoomPage: React.FC = () => {
                         )
                       )}
                     </div>
-
+                    {user.id !== currentUser.id && (
+                      <div className="poke-actions">
+                        <div
+                          className="poke-trigger"
+                          onMouseEnter={() => handlePokeMouseEnter(user.id)}
+                          onMouseLeave={handlePokeMouseLeave}
+                        >
+                          <button
+                            className="btn-poke"
+                            title={`Poke ${user.name}`}
+                          >
+                            👋
+                          </button>
+                          {showPokeMenu === user.id && (
+                            <div 
+                              className="poke-menu"
+                              onMouseEnter={handlePokeMenuMouseEnter}
+                              onMouseLeave={handlePokeMenuMouseLeave}
+                            >
+                              {(['paper-airplane', 'finger', 'paper-ball', 'arrow'] as PokeProjectile[]).map((projectile) => (
+                                <button
+                                  key={projectile}
+                                  onClick={() => handlePoke(user.id, projectile)}
+                                  className="poke-option"
+                                  title={getProjectileLabel(projectile)}
+                                >
+                                  {getProjectileIcon(projectile)}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
