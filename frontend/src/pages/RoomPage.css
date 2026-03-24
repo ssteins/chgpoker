@@ -106,6 +106,34 @@
   font-size: 18px;
 }
 
+/* Timer controls in voting */
+.timer-section {
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.timer-input-group {
+  margin-top: 8px;
+}
+
+.timer-helper-text {
+  font-size: 12px;
+  color: #86868b;
+  margin-top: 4px;
+  display: block;
+}
+
+.timer-controls {
+  margin-top: 12px;
+}
+
+.timer-controls .form-buttons {
+  display: flex;
+  gap: 8px;
+}
+
 /* Main content layout */
 .room-content {
   flex: 1;
@@ -805,252 +833,28 @@
   position: fixed;
   z-index: 10000;
   pointer-events: none;
-  
-  /* Position at start coordinates */
-  left: var(--start-x);
-  top: var(--start-y);
-  transform: translate(-50%, -50%);
 }
 
 .projectile {
   font-size: 32px;
-  animation: arcFlight 2.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+  animation: flyToTarget 2s linear forwards;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
 }
 
-/* Arc animation using quadratic bezier curve simulation */
-@keyframes arcFlight {
+@keyframes flyToTarget {
   0% {
-    transform: translateX(0) translateY(0) scale(1) rotate(0deg);
-    opacity: 0;
-  }
-  5% {
-    opacity: 1;
-  }
-  25% {
-    transform: translateX(calc((var(--end-x) - var(--start-x)) * 0.25)) 
-               translateY(calc((var(--end-y) - var(--start-y)) * 0.25 + (var(--control-y) - var(--start-y)) * 0.375)) 
-               scale(1.1) 
-               rotate(90deg);
+    transform: translate3d(0, -20px, 0);
   }
   50% {
-    transform: translateX(calc((var(--end-x) - var(--start-x)) * 0.5)) 
-               translateY(calc((var(--end-y) - var(--start-y)) * 0.5 + (var(--control-y) - var(--start-y)) * 0.5)) 
-               scale(1.2) 
-               rotate(180deg);
-  }
-  75% {
-    transform: translateX(calc((var(--end-x) - var(--start-x)) * 0.75)) 
-               translateY(calc((var(--end-y) - var(--start-y)) * 0.75 + (var(--control-y) - var(--start-y)) * 0.375)) 
-               scale(1.1) 
-               rotate(270deg);
-  }
-  95% {
-    transform: translateX(calc(var(--end-x) - var(--start-x))) 
-               translateY(calc(var(--end-y) - var(--start-y))) 
-               scale(1.3) 
-               rotate(360deg);
-    opacity: 1;
+    transform: translate3d(calc(var(--end-x) * 0.5), calc(var(--end-y) * 0.5), 0);
   }
   100% {
-    transform: translateX(calc(var(--end-x) - var(--start-x))) 
-               translateY(calc(var(--end-y) - var(--start-y))) 
-               scale(0.3) 
-               rotate(360deg);
-    opacity: 0;
+    transform: translate3d(var(--end-x), var(--end-y), 0);
   }
 }
 
-/* Projectile-specific arc animations */
-.poke-animation[data-projectile="paper-airplane"] .projectile {
-  animation: paperAirplaneArc 2.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
-}
-
-.poke-animation[data-projectile="finger"] .projectile {
-  animation: fingerArc 2.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
-}
-
-.poke-animation[data-projectile="paper-ball"] .projectile {
-  animation: paperBallArc 2.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
-}
-
-.poke-animation[data-projectile="arrow"] .projectile {
-  animation: arrowArc 2.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
-}
-
-@keyframes paperAirplaneArc {
-  0% {
-    transform: translateX(0) translateY(0) scale(1) rotate(var(--direction));
-    opacity: 0;
-  }
-  5% {
-    opacity: 1;
-  }
-  25% {
-    transform: translateX(calc((var(--end-x) - var(--start-x)) * 0.25)) 
-               translateY(calc((var(--end-y) - var(--start-y)) * 0.25 + (var(--control-y) - var(--start-y)) * 0.375 - 20px)) 
-               scale(1.1) 
-               rotate(calc(var(--direction) - 10deg));
-  }
-  50% {
-    transform: translateX(calc((var(--end-x) - var(--start-x)) * 0.5)) 
-               translateY(calc((var(--end-y) - var(--start-y)) * 0.5 + (var(--control-y) - var(--start-y)) * 0.5 - 30px)) 
-               scale(1.2) 
-               rotate(calc(var(--direction) - 5deg));
-  }
-  75% {
-    transform: translateX(calc((var(--end-x) - var(--start-x)) * 0.75)) 
-               translateY(calc((var(--end-y) - var(--start-y)) * 0.75 + (var(--control-y) - var(--start-y)) * 0.375 - 20px)) 
-               scale(1.1) 
-               rotate(calc(var(--direction) + 5deg));
-  }
-  95% {
-    transform: translateX(calc(var(--end-x) - var(--start-x))) 
-               translateY(calc(var(--end-y) - var(--start-y))) 
-               scale(1.3) 
-               rotate(calc(var(--direction) + 10deg));
-    opacity: 1;
-  }
-  100% {
-    transform: translateX(calc(var(--end-x) - var(--start-x))) 
-               translateY(calc(var(--end-y) - var(--start-y))) 
-               scale(0.3) 
-               rotate(calc(var(--direction) + 10deg));
-    opacity: 0;
-  }
-}
-
-@keyframes fingerArc {
-  0% {
-    transform: translateX(0) translateY(0) scale(0.8) rotate(var(--direction));
-    opacity: 0;
-  }
-  5% {
-    opacity: 1;
-  }
-  20% {
-    transform: translateX(calc((var(--end-x) - var(--start-x)) * 0.2)) 
-               translateY(calc((var(--end-y) - var(--start-y)) * 0.2 + (var(--control-y) - var(--start-y)) * 0.32)) 
-               scale(1.4) 
-               rotate(var(--direction));
-  }
-  40% {
-    transform: translateX(calc((var(--end-x) - var(--start-x)) * 0.4)) 
-               translateY(calc((var(--end-y) - var(--start-y)) * 0.4 + (var(--control-y) - var(--start-y)) * 0.48)) 
-               scale(1.8) 
-               rotate(var(--direction));
-  }
-  60% {
-    transform: translateX(calc((var(--end-x) - var(--start-x)) * 0.6)) 
-               translateY(calc((var(--end-y) - var(--start-y)) * 0.6 + (var(--control-y) - var(--start-y)) * 0.48)) 
-               scale(1.8) 
-               rotate(var(--direction));
-  }
-  80% {
-    transform: translateX(calc((var(--end-x) - var(--start-x)) * 0.8)) 
-               translateY(calc((var(--end-y) - var(--start-y)) * 0.8 + (var(--control-y) - var(--start-y)) * 0.32)) 
-               scale(1.4) 
-               rotate(var(--direction));
-  }
-  95% {
-    transform: translateX(calc(var(--end-x) - var(--start-x))) 
-               translateY(calc(var(--end-y) - var(--start-y))) 
-               scale(2.0) 
-               rotate(var(--direction));
-    opacity: 1;
-  }
-  100% {
-    transform: translateX(calc(var(--end-x) - var(--start-x))) 
-               translateY(calc(var(--end-y) - var(--start-y))) 
-               scale(0.5) 
-               rotate(var(--direction));
-    opacity: 0;
-  }
-}
-
-@keyframes paperBallArc {
-  0% {
-    transform: translateX(0) translateY(0) scale(1) rotate(0deg);
-    opacity: 0;
-  }
-  5% {
-    opacity: 1;
-  }
-  25% {
-    transform: translateX(calc((var(--end-x) - var(--start-x)) * 0.25)) 
-               translateY(calc((var(--end-y) - var(--start-y)) * 0.25 + (var(--control-y) - var(--start-y)) * 0.375)) 
-               scale(1.1) 
-               rotate(180deg);
-  }
-  50% {
-    transform: translateX(calc((var(--end-x) - var(--start-x)) * 0.5)) 
-               translateY(calc((var(--end-y) - var(--start-y)) * 0.5 + (var(--control-y) - var(--start-y)) * 0.5)) 
-               scale(1.2) 
-               rotate(360deg);
-  }
-  75% {
-    transform: translateX(calc((var(--end-x) - var(--start-x)) * 0.75)) 
-               translateY(calc((var(--end-y) - var(--start-y)) * 0.75 + (var(--control-y) - var(--start-y)) * 0.375)) 
-               scale(1.1) 
-               rotate(540deg);
-  }
-  95% {
-    transform: translateX(calc(var(--end-x) - var(--start-x))) 
-               translateY(calc(var(--end-y) - var(--start-y))) 
-               scale(1.3) 
-               rotate(720deg);
-    opacity: 1;
-  }
-  100% {
-    transform: translateX(calc(var(--end-x) - var(--start-x))) 
-               translateY(calc(var(--end-y) - var(--start-y))) 
-               scale(0.2) 
-               rotate(720deg);
-    opacity: 0;
-  }
-}
-
-@keyframes arrowArc {
-  0% {
-    transform: translateX(0) translateY(0) scale(1) rotate(var(--direction));
-    opacity: 0;
-  }
-  5% {
-    opacity: 1;
-  }
-  25% {
-    transform: translateX(calc((var(--end-x) - var(--start-x)) * 0.25)) 
-               translateY(calc((var(--end-y) - var(--start-y)) * 0.25 + (var(--control-y) - var(--start-y)) * 0.375)) 
-               scale(1.0) 
-               rotate(var(--direction));
-  }
-  50% {
-    transform: translateX(calc((var(--end-x) - var(--start-x)) * 0.5)) 
-               translateY(calc((var(--end-y) - var(--start-y)) * 0.5 + (var(--control-y) - var(--start-y)) * 0.5)) 
-               scale(1.1) 
-               rotate(var(--direction));
-  }
-  75% {
-    transform: translateX(calc((var(--end-x) - var(--start-x)) * 0.75)) 
-               translateY(calc((var(--end-y) - var(--start-y)) * 0.75 + (var(--control-y) - var(--start-y)) * 0.375)) 
-               scale(1.0) 
-               rotate(var(--direction));
-  }
-  88% {
-    transform: translateX(calc(var(--end-x) - var(--start-x))) 
-               translateY(calc(var(--end-y) - var(--start-y))) 
-               scale(1.5) 
-               rotate(var(--direction));
-    opacity: 1;
-  }
-  100% {
-    transform: translateX(calc(var(--end-x) - var(--start-x))) 
-               translateY(calc(var(--end-y) - var(--start-y))) 
-               scale(0.3) 
-               rotate(var(--direction));
-    opacity: 0;
-  }
-}
 
 /* User item layout adjustments for poke button */
 .user-item {
@@ -1068,19 +872,24 @@
 }
 
 .user-item.poke-target {
-  animation: pokeTargetHighlight 1s ease-out;
+  animation: pokeTargetHighlight 0.6s ease-out;
 }
 
 @keyframes pokeTargetHighlight {
   0% { 
-    background: rgba(255, 193, 7, 0.3); 
+    background: rgba(255, 193, 7, 0); 
     transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.7);
+    box-shadow: 0 0 0 0 rgba(255, 193, 7, 0);
   }
-  50% { 
-    background: rgba(255, 193, 7, 0.5); 
+  30% { 
+    background: rgba(255, 193, 7, 0.4); 
+    transform: scale(1.015);
+    box-shadow: 0 0 0 4px rgba(255, 193, 7, 0.3);
+  }
+  60% { 
+    background: rgba(255, 193, 7, 0.6); 
     transform: scale(1.02);
-    box-shadow: 0 0 0 10px rgba(255, 193, 7, 0);
+    box-shadow: 0 0 0 8px rgba(255, 193, 7, 0.1);
   }
   100% { 
     background: transparent; 

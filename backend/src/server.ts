@@ -270,6 +270,56 @@ function sendSSEToUser(res: express.Response, event: SSEEvent): void {
 }
 
 /**
+ * Start a countdown timer for a room
+ */
+function startRoomTimer(roomId: string, duration: number) {
+  const interval = setInterval(() => {
+    const room = rooms.get(roomId);
+    if (!room || !room.timerStartTime) {
+      clearInterval(interval);
+      return;
+    }
+    
+    const elapsed = Math.floor((Date.now() - room.timerStartTime.getTime()) / 1000);
+    const remaining = duration - elapsed;
+    
+    if (remaining <= 0) {
+      // Timer expired - reveal votes
+      clearInterval(interval);
+      room.timerStartTime = undefined;
+      room.timerDuration = undefined;
+      room.isVotingActive = false;
+      room.votesRevealed = true;
+      rooms.set(roomId, room);
+      
+      // Send timer completed event
+      sendSSEToRoom(roomId, {
+        type: 'timer-completed',
+        data: {},
+        timestamp: new Date()
+      });
+      
+      // Calculate and send vote results
+      const stats = calculateVoteStats(room.users);
+      sendSSEToRoom(roomId, {
+        type: 'votes-revealed',
+        data: stats,
+        timestamp: new Date()
+      });
+      
+      console.log(`Timer expired for room ${roomId}, votes revealed`);
+    } else {
+      // Send periodic timer updates
+      sendSSEToRoom(roomId, {
+        type: 'timer-update',
+        data: { remaining },
+        timestamp: new Date()
+      });
+    }
+  }, 1000); // Update every second
+}
+
+/**
  * Remove user from room and clean up if owner leaves
  */
 function removeUserFromRoom(roomId: string, userId: string): void {
@@ -733,6 +783,7 @@ app.post('/api/rooms/:roomId/start-voting',
     query('userId').isUUID(),
     body('oktaToken').isString().notEmpty(),
     body('ownerParticipating').optional().isBoolean(),
+    body('timerDuration').optional().isInt({ min: 1 }),
     handleValidationErrors,
     requireAuth
   ],
@@ -740,7 +791,7 @@ app.post('/api/rooms/:roomId/start-voting',
   try {
     const { roomId } = req.params;
     const { userId } = req.query;
-    const { ownerParticipating } = req.body;
+    const { ownerParticipating, timerDuration } = req.body;
     
     const room = rooms.get(roomId);
     if (!room) {
@@ -766,6 +817,22 @@ app.post('/api/rooms/:roomId/start-voting',
     room.isVotingActive = true;
     room.votesRevealed = false;
     
+    // Start timer if specified
+    if (timerDuration) {
+      room.timerDuration = timerDuration;
+      room.timerStartTime = new Date();
+      
+      // Send timer started event
+      sendSSEToRoom(roomId, {
+        type: 'timer-started',
+        data: { duration: timerDuration },
+        timestamp: new Date()
+      });
+      
+      // Start countdown
+      startRoomTimer(roomId, timerDuration);
+    }
+    
     rooms.set(roomId, room);
     
     sendSSEToRoom(roomId, {
@@ -774,7 +841,7 @@ app.post('/api/rooms/:roomId/start-voting',
       timestamp: new Date()
     });
     
-    console.log(`Voting started in room ${roomId} (owner participating: ${room.ownerParticipating})`);
+    console.log(`Voting started in room ${roomId} (owner participating: ${room.ownerParticipating}${timerDuration ? `, timer: ${timerDuration}s` : ''})`);
     res.json(room);
   } catch (error) {
     console.error('Error starting voting:', error);
@@ -838,6 +905,63 @@ app.post('/api/rooms/:roomId/poke',
   } catch (error) {
     console.error('Error sending poke:', error);
     res.status(500).json({ error: 'Failed to send poke' });
+  }
+});
+
+/**
+ * Start a timer for active voting session
+ */
+app.post('/api/rooms/:roomId/start-timer',
+  [
+    param('roomId').isUUID(),
+    query('userId').isUUID(),
+    body('duration').isInt({ min: 1, max: 3600 }), // 1 second to 1 hour
+    handleValidationErrors
+  ],
+  (req: express.Request, res: express.Response) => {
+  try {
+    const { roomId } = req.params;
+    const { userId } = req.query;
+    const { duration }: StartTimerRequest = req.body;
+    
+    const room = rooms.get(roomId);
+    if (!room) {
+      return res.status(404).json({ error: 'Room not found' });
+    }
+    
+    const user = room.users.find(u => u.id === userId);
+    if (!user || !user.isOwner) {
+      return res.status(403).json({ error: 'Only room owner can start timer' });
+    }
+    
+    if (!room.isVotingActive) {
+      return res.status(400).json({ error: 'Can only start timer during active voting' });
+    }
+    
+    if (room.timerStartTime) {
+      return res.status(400).json({ error: 'Timer already running' });
+    }
+    
+    // Start timer
+    room.timerDuration = duration;
+    room.timerStartTime = new Date();
+    rooms.set(roomId, room);
+    
+    // Send timer started event
+    sendSSEToRoom(roomId, {
+      type: 'timer-started',
+      data: { duration },
+      timestamp: new Date()
+    });
+    
+    // Start countdown
+    startRoomTimer(roomId, duration);
+    
+    console.log(`Timer started in room ${roomId}: ${duration} seconds`);
+    res.json({ success: true, duration });
+  } catch (error) {
+    console.error('Error starting timer:', error);
+    res.status(500).json({ error: 'Failed to start timer' });
   }
 });
 

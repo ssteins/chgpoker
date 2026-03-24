@@ -76,10 +76,11 @@ export type SSEEventType =
   | 'vote-cast' 
   | 'votes-revealed' 
   | 'timer-started' 
-  | 'timer-tick' 
-  | 'timer-ended'
+  | 'timer-update' 
+  | 'timer-completed'
   | 'settings-updated'
-  | 'poke';
+  | 'poke'
+  | 'vote-results';
 
 /**
  * SSE event data structure

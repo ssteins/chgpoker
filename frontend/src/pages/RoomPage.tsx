@@ -19,6 +19,9 @@ const RoomPage: React.FC = () => {
   const [voteStats, setVoteStats] = useState<VoteStats | null>(null);
   const [selectedVote, setSelectedVote] = useState<string | number | null>(null);
   // const [timerRemaining, setTimerRemaining] = useState<number | null>(null);
+  const [timerRemaining, setTimerRemaining] = useState<number | null>(null);
+  const [timerDuration, setTimerDuration] = useState<string>(''); // For form input
+  const [showTimerInput, setShowTimerInput] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingRoom, setEditingRoom] = useState(false);
@@ -30,6 +33,7 @@ const RoomPage: React.FC = () => {
   const [activePokes, setActivePokes] = useState<(PokeData & { targetPosition?: { x: number; y: number }; startPosition?: { x: number; y: number } })[]>([]);
   const [showPokeMenu, setShowPokeMenu] = useState<string | null>(null); // userId of target
   const [pokeMenuTimer, setPokeMenuTimer] = useState<NodeJS.Timeout | null>(null);
+  const [lastUsedIcons, setLastUsedIcons] = useState<Record<string, PokeProjectile>>({});
   
   const eventSourceRef = useRef<EventSource | null>(null);
   const userElementsRef = useRef<Map<string, HTMLElement>>(new Map());
@@ -287,13 +291,13 @@ const RoomPage: React.FC = () => {
         setVoteStats(event.data.stats);
         break;
       case 'timer-started':
-        // setTimerRemaining(event.data.duration);
+        setTimerRemaining(event.data.duration);
         break;
-      case 'timer-tick':
-        // setTimerRemaining(event.data.remaining);
+      case 'timer-update':
+        setTimerRemaining(event.data.remaining);
         break;
-      case 'timer-ended':
-        // setTimerRemaining(null);
+      case 'timer-completed':
+        setTimerRemaining(null);
         setRoom(event.data.room);
         setVoteStats(event.data.stats);
         break;
@@ -313,7 +317,7 @@ const RoomPage: React.FC = () => {
         }
         
         // Generate random start position on screen edge
-        const randomStartPosition = generateRandomStartPosition(targetPosition);
+        const randomStartPosition = generateRandomStartPosition();
         
         setActivePokes(prev => [...prev, { ...pokeData, targetPosition, startPosition: randomStartPosition }]);
         
@@ -323,14 +327,14 @@ const RoomPage: React.FC = () => {
             targetElement.classList.add('poke-target');
             setTimeout(() => {
               targetElement.classList.remove('poke-target');
-            }, 800);
-          }, 1800); // Adjusted for new animation timing
+            }, 600);
+          }, 1600); // Adjusted for highlight timing
         }
         
         // Remove the poke after animation completes
         setTimeout(() => {
           setActivePokes(prev => prev.filter(p => p.id !== pokeData.id));
-        }, 2500); // Adjusted timing
+        }, 2000); // Match 2s animation duration
         break;
     }
   };
@@ -399,17 +403,24 @@ const RoomPage: React.FC = () => {
       });
       if (!roomResponse.ok) throw new Error('Failed to update room');
 
-      // Then start voting with owner participation flag
+      // Start voting with timer if specified
+      const votePayload: any = { oktaToken, ownerParticipating };
+      if (timerDuration && parseInt(timerDuration) > 0) {
+        votePayload.timerDuration = parseInt(timerDuration) * 60; // Convert minutes to seconds
+      }
+
       const voteResponse = await fetch(`/api/rooms/${roomId}/start-voting?userId=${userId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ oktaToken, ownerParticipating })
+        body: JSON.stringify(votePayload)
       });
       if (!voteResponse.ok) throw new Error('Failed to start voting');
       
       setSelectedVote(null);
       setVoteStats(null);
       setPreparingVote(false);
+      setTimerDuration('');
+      setShowTimerInput(false);
     } catch (err) {
       setActionMessage('Failed to start voting session');
       setTimeout(() => setActionMessage(null), 3000);
@@ -558,11 +569,42 @@ const RoomPage: React.FC = () => {
       });
       
       if (!response.ok) throw new Error('Failed to send poke');
+      
+      // Remember last used icon for this user
+      setLastUsedIcons(prev => ({ ...prev, [toUserId]: projectile }));
       setShowPokeMenu(null); // Close menu after poking
     } catch (err) {
       setActionMessage('Failed to send poke');
       setTimeout(() => setActionMessage(null), 3000);
     }
+  };
+
+  const handleDirectPoke = async (toUserId: string) => {
+    // Use last used icon for this user, or default to 'finger'
+    const projectile = lastUsedIcons[toUserId] || 'finger';
+    await handlePoke(toUserId, projectile);
+  };
+
+  const handleStartTimer = async (duration: number) => {
+    try {
+      const response = await fetch(`/api/rooms/${roomId}/start-timer?userId=${userId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ duration })
+      });
+      if (!response.ok) throw new Error('Failed to start timer');
+      setTimerDuration('');
+      setShowTimerInput(false);
+    } catch (err) {
+      setActionMessage('Failed to start timer');
+      setTimeout(() => setActionMessage(null), 3000);
+    }
+  };
+
+  const formatTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   const handlePokeMouseEnter = (targetUserId: string) => {
@@ -589,7 +631,7 @@ const RoomPage: React.FC = () => {
     setShowPokeMenu(null);
   };
 
-  const generateRandomStartPosition = (targetPosition: { x: number; y: number }) => {
+  const generateRandomStartPosition = () => {
     const screenWidth = window.innerWidth;
     const screenHeight = window.innerHeight;
     const edge = Math.floor(Math.random() * 4); // 0: left, 1: right, 2: top, 3: bottom
@@ -671,33 +713,15 @@ const RoomPage: React.FC = () => {
         const startPos = poke.startPosition || { x: -100, y: window.innerHeight / 2 };
         const endPos = poke.targetPosition || { x: window.innerWidth / 2, y: window.innerHeight / 2 };
         
-        // Calculate control point for arc (higher arc for longer distances)
-        const midX = (startPos.x + endPos.x) / 2;
-        const midY = (startPos.y + endPos.y) / 2;
-        const distance = Math.sqrt(Math.pow(endPos.x - startPos.x, 2) + Math.pow(endPos.y - startPos.y, 2));
-        const arcHeight = Math.min(distance * 0.3, 200); // Dynamic arc height
-        const controlY = midY - arcHeight;
-        
-        // Calculate initial direction angle (direction projectile should point)
-        const deltaX = endPos.x - startPos.x;
-        const deltaY = endPos.y - startPos.y;
-        const directionAngle = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
-        
         return (
           <div
             key={poke.id}
             className="poke-animation"
-            data-projectile={poke.projectile}
             style={{
-              '--start-x': `${startPos.x}px`,
-              '--start-y': `${startPos.y}px`,
-              '--end-x': `${endPos.x}px`,
-              '--end-y': `${endPos.y}px`,
-              '--mid-x': `${midX}px`,
-              '--mid-y': `${midY}px`,
-              '--control-y': `${controlY}px`,
-              '--distance': `${distance}px`,
-              '--direction': `${directionAngle}deg`,
+              left: startPos.x,
+              top: startPos.y,
+              '--end-x': `${endPos.x - startPos.x}px`,
+              '--end-y': `${endPos.y - startPos.y}px`,
             } as React.CSSProperties}
           >
             <div className="projectile">
@@ -833,6 +857,33 @@ const RoomPage: React.FC = () => {
                         <span className="checkbox-text">I will vote this round</span>
                       </label>
                     </div>
+
+                    <div className="timer-section mb-3">
+                      <div className="checkbox-label mb-2">
+                        <input
+                          type="checkbox"
+                          checked={showTimerInput}
+                          onChange={(e) => setShowTimerInput(e.target.checked)}
+                          className="checkbox-input"
+                        />
+                        <span className="checkbox-text">Set voting timer</span>
+                      </div>
+                      
+                      {showTimerInput && (
+                        <div className="timer-input-group">
+                          <input
+                            type="number"
+                            value={timerDuration}
+                            onChange={(e) => setTimerDuration(e.target.value)}
+                            className="form-input"
+                            placeholder="Timer duration (minutes)"
+                            min="1"
+                            max="60"
+                          />
+                          <span className="timer-helper-text">Enter time in minutes (1-60)</span>
+                        </div>
+                      )}
+                    </div>
                     
                     <div className="form-buttons">
                       <button 
@@ -869,12 +920,63 @@ const RoomPage: React.FC = () => {
                       </>
                     )}
                     {room.isVotingActive && (
-                      <button 
-                        onClick={handleRevealVotes} 
-                        className="btn btn-primary w-full"
-                      >
-                        Reveal Votes
-                      </button>
+                      <>
+                        <button 
+                          onClick={handleRevealVotes} 
+                          className="btn btn-primary w-full"
+                        >
+                          Reveal Votes
+                        </button>
+                        
+                        {!timerRemaining && (
+                          showTimerInput ? (
+                            <div className="timer-controls">
+                              <input
+                                type="number"
+                                value={timerDuration}
+                                onChange={(e) => setTimerDuration(e.target.value)}
+                                className="form-input"
+                                placeholder="Minutes"
+                                min="1"
+                                max="60"
+                                style={{ marginBottom: '8px' }}
+                              />
+                              <div className="form-buttons">
+                                <button 
+                                  onClick={() => {
+                                    setShowTimerInput(false);
+                                    setTimerDuration('');
+                                  }}
+                                  className="btn btn-secondary"
+                                  style={{ fontSize: '12px', padding: '6px 12px' }}
+                                >
+                                  Cancel
+                                </button>
+                                <button 
+                                  onClick={() => {
+                                    if (timerDuration && parseInt(timerDuration) > 0) {
+                                      handleStartTimer(parseInt(timerDuration) * 60);
+                                    }
+                                  }}
+                                  className="btn btn-primary"
+                                  style={{ fontSize: '12px', padding: '6px 12px' }}
+                                  disabled={!timerDuration || parseInt(timerDuration) <= 0}
+                                >
+                                  Start Timer
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button 
+                              onClick={() => setShowTimerInput(true)}
+                              className="btn btn-secondary w-full"
+                              style={{ fontSize: '12px', padding: '8px 12px' }}
+                            >
+                              Add Timer
+                            </button>
+                          )
+                        )}
+                      </>
                     )}
                     {room.votesRevealed && (
                       <button 
@@ -946,8 +1048,9 @@ const RoomPage: React.FC = () => {
                           <button
                             className="btn-poke"
                             title={`Poke ${user.name}`}
+                            onClick={() => handleDirectPoke(user.id)}
                           >
-                            👋
+                            {getProjectileIcon(lastUsedIcons[user.id] || 'finger')}
                           </button>
                           {showPokeMenu === user.id && (
                             <div 
@@ -990,6 +1093,14 @@ const RoomPage: React.FC = () => {
               <div className="voting-active">
                 <h2>Voting in Progress</h2>
                 <p>Pick your estimate for the current story</p>
+                
+                {timerRemaining && (
+                  <div className="timer-display">
+                    <span className="timer-label">Time remaining:</span>
+                    <span className="timer-value">{formatTime(timerRemaining)}</span>
+                  </div>
+                )}
+                
                 <div className="voting-progress">
                   <span>{usersWhoVoted}/{eligibleVoters} votes cast</span>
                   <div className="progress-bar">
